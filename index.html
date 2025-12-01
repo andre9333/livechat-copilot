@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terra AI Copilot</title>
+    <script src="https://unpkg.com/@livechat/agent-app-sdk@1.6.3/dist/agentapp.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg: #0f0f14;
+            --card: #1a1a24;
+            --border: #2a2a3a;
+            --text: #f0f0f5;
+            --text-dim: #8888a0;
+            --accent: #00d4aa;
+            --accent-hover: #00f0c0;
+            --warning: #ffa726;
+            --info: #42a5f5;
+        }
+        
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 13px;
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+        
+        /* Status bar */
+        .status-bar {
+            padding: 6px 16px;
+            background: var(--card);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 10px;
+            color: var(--text-dim);
+        }
+        
+        .status-bar .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 6px;
+            display: inline-block;
+        }
+        
+        .status-bar .status-dot.live { background: #4caf50; }
+        .status-bar .status-dot.loading { background: var(--warning); animation: pulse 1s infinite; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        
+        /* Main response section */
+        .response-hero {
+            background: linear-gradient(135deg, #1a2a35 0%, #1a1a24 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 16px;
+        }
+        
+        .response-hero.updated {
+            animation: highlight 0.5s ease;
+        }
+        
+        @keyframes highlight {
+            0% { background: linear-gradient(135deg, #1a4a35 0%, #1a1a24 100%); }
+            100% { background: linear-gradient(135deg, #1a2a35 0%, #1a1a24 100%); }
+        }
+        
+        .response-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+        
+        .response-text {
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text);
+            margin-bottom: 12px;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        
+        .use-btn {
+            width: 100%;
+            padding: 14px 20px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .use-btn:hover { background: var(--accent-hover); }
+        .use-btn.copied { background: #2a4a3a; color: var(--accent); }
+        
+        /* Feedback buttons */
+        .feedback-buttons {
+            display: flex;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--card);
+            border-top: 1px solid var(--border);
+        }
+        
+        .feedback-btn {
+            flex: 1;
+            padding: 8px 12px;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-dim);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+        
+        .feedback-btn:hover {
+            background: var(--bg);
+            border-color: var(--accent);
+            color: var(--text);
+        }
+        
+        .feedback-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #000;
+        }
+        
+        .feedback-btn.thumbs-up.active { background: rgba(76, 175, 80, 0.2); border-color: #4caf50; color: #4caf50; }
+        .feedback-btn.thumbs-down.active { background: rgba(244, 67, 54, 0.2); border-color: #f44336; color: #f44336; }
+        .feedback-btn.edited.active { background: rgba(255, 167, 38, 0.2); border-color: #ffa726; color: #ffa726; }
+        
+        /* Alternatives */
+        .alternatives {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .alt-label {
+            font-size: 10px;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+        
+        .alt-item {
+            padding: 8px 10px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            font-size: 12px;
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .alt-item:hover {
+            background: #252535;
+            color: var(--text);
+            border-color: var(--accent);
+        }
+        
+        /* Context sections */
+        .context-section {
+            border-bottom: 1px solid var(--border);
+        }
+        
+        .context-header {
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+        
+        .context-header:hover { background: var(--card); }
+        
+        .context-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-dim);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .context-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+        }
+        
+        .context-badge.match { background: rgba(0, 212, 170, 0.2); color: var(--accent); }
+        .context-badge.new { background: rgba(255, 167, 38, 0.2); color: var(--warning); }
+        .context-badge.product { background: rgba(66, 165, 245, 0.2); color: var(--info); }
+        
+        .context-arrow {
+            font-size: 10px;
+            color: var(--text-dim);
+            transition: transform 0.2s;
+        }
+        
+        .context-section.open .context-arrow { transform: rotate(180deg); }
+        .context-body { padding: 0 16px 12px; display: none; }
+        .context-section.open .context-body { display: block; }
+        
+        .context-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 12px;
+        }
+        
+        .context-row .label { color: var(--text-dim); }
+        .context-row .value { font-weight: 500; }
+        
+        /* Action bar */
+        .action-bar {
+            padding: 10px 16px;
+            background: rgba(255, 167, 38, 0.1);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--warning);
+        }
+        
+        /* States */
+        .state-container {
+            padding: 40px 20px;
+            text-align: center;
+        }
+        
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+        
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .loading-spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto;
+        }
+        
+        .state-text { color: var(--text-dim); font-size: 13px; }
+        .state-icon { font-size: 28px; margin-bottom: 8px; }
+        
+        .error-box {
+            padding: 12px 16px;
+            background: rgba(255, 82, 82, 0.1);
+            border: 1px solid #ff5252;
+            border-radius: 8px;
+            margin: 16px;
+            color: #ff5252;
+            font-size: 12px;
+        }
+        
+        /* Test mode */
+        .test-mode { padding: 16px; }
+        .test-title {
+            font-size: 11px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+        
+        .form-group { margin-bottom: 10px; }
+        .form-group label {
+            font-size: 11px;
+            color: var(--text-dim);
+            display: block;
+            margin-bottom: 4px;
+        }
+        
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 13px;
+            font-family: inherit;
+        }
+        
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        .test-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        .test-btn:hover { background: var(--accent-hover); }
+        
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: var(--accent);
+            color: #000;
+            padding: 10px 24px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            opacity: 0;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+        
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="state-container">
+            <div class="spinner"></div>
+            <div class="state-text">Connecting...</div>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // =====================================================
+        // CONFIGURATION - Update this URL to your ngrok tunnel
+        // =====================================================
+        const API_BASE = 'https://livechataiagent.ngrok.app';
+        
+        let widget = null;
+        let currentChatId = null;
+        let currentProfile = null;
+        let currentChatData = null;
+        let currentTranscript = '';
+        let lastMessageCount = 0;
+        let lastResponse = null;
+        let currentSuggestionId = null;
+        let pollInterval = null;
+        let isRefreshing = false;
+        let currentRequestId = 0;
+        
+        const isStandalone = window.self === window.top;
+        
+        async function init() {
+            if (isStandalone) {
+                showTestMode();
+                return;
+            }
+            
+            // Quick health check to see if backend is online
+            try {
+                const healthCheck = await fetch(API_BASE + '/api/health', { 
+                    method: 'GET',
+                    signal: AbortSignal.timeout(3000)
+                }).catch(() => null);
+                
+                if (!healthCheck || !healthCheck.ok) {
+                    showOffline();
+                    return;
+                }
+            } catch (e) {
+                showOffline();
+                return;
+            }
+            
+            try {
+                widget = await LiveChat.createDetailsWidget();
+                widget.on('customer_profile', handleProfileChange);
+                
+                const profile = widget.getCustomerProfile();
+                if (profile && profile.chat) {
+                    handleProfileChange(profile);
+                } else {
+                    showWaiting();
+                }
+            } catch (error) {
+                console.error('[Copilot] Init error:', error);
+                showError('Widget must run inside LiveChat');
+            }
+        }
+        
+        async function handleProfileChange(profile) {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+            
+            if (!profile || !profile.chat) {
+                showWaiting();
+                return;
+            }
+            
+            const newChatId = profile.chat.chat_id;
+            if (newChatId !== currentChatId) {
+                currentRequestId++;
+                currentChatId = newChatId;
+                currentProfile = profile;
+                currentChatData = null;
+                currentTranscript = '';
+                lastMessageCount = 0;
+                lastResponse = null;
+                currentSuggestionId = null;
+                
+                console.log('[Copilot] Switched to new chat:', newChatId, 'requestId:', currentRequestId);
+                showLoading();
+            }
+            
+            await fetchChatAndAnalyze();
+            pollInterval = setInterval(checkForNewMessages, 3000);
+        }
+        
+        async function fetchChatAndAnalyze() {
+            if (!currentChatId) return;
+            
+            const chatIdAtStart = currentChatId;
+            const requestIdAtStart = currentRequestId;
+            
+            try {
+                const chatResponse = await fetch(API_BASE + '/api/livechat/chat/' + currentChatId);
+                
+                if (!chatResponse.ok) {
+                    console.error('[Copilot] Failed to fetch chat');
+                    return;
+                }
+                
+                const chatData = await chatResponse.json();
+                
+                if (chatIdAtStart !== currentChatId || requestIdAtStart !== currentRequestId) {
+                    console.log('[Copilot] Chat changed during fetch, discarding');
+                    return;
+                }
+                
+                currentChatData = chatData;
+                
+                const thread = chatData.thread || chatData;
+                const events = thread.events || [];
+                const messages = events.filter(e => e.type === 'message');
+                
+                if (messages.length === lastMessageCount && lastResponse) {
+                    return;
+                }
+                
+                lastMessageCount = messages.length;
+                
+                let transcript = '';
+                let lastCustomerMessage = '';
+                
+                messages.forEach(msg => {
+                    const isCustomer = msg.author_id?.startsWith('customer') || 
+                                       (msg.author_id && !msg.author_id.includes('@'));
+                    const author = isCustomer ? 'Customer' : 'Agent';
+                    const text = msg.text || '';
+                    transcript += author + ': ' + text + '\n';
+                    
+                    if (isCustomer) {
+                        lastCustomerMessage = text;
+                    }
+                });
+                
+                currentTranscript = transcript;
+                await getSuggestions(lastCustomerMessage);
+                
+            } catch (error) {
+                console.error('[Copilot] Error fetching chat:', error);
+            }
+        }
+        
+        async function checkForNewMessages() {
+            if (!currentChatId || isRefreshing) return;
+            
+            isRefreshing = true;
+            const chatIdAtStart = currentChatId;
+            const requestIdAtStart = currentRequestId;
+            
+            try {
+                const chatResponse = await fetch(API_BASE + '/api/livechat/chat/' + currentChatId);
+                
+                if (!chatResponse.ok) {
+                    isRefreshing = false;
+                    return;
+                }
+                
+                const chatData = await chatResponse.json();
+                
+                if (chatIdAtStart !== currentChatId || requestIdAtStart !== currentRequestId) {
+                    console.log('[Copilot] Chat changed during poll, discarding');
+                    return;
+                }
+                
+                currentChatData = chatData;
+                
+                const thread = chatData.thread || chatData;
+                const events = thread.events || [];
+                const messages = events.filter(e => e.type === 'message');
+                
+                if (messages.length !== lastMessageCount) {
+                    console.log('[Copilot] New message detected!', messages.length, 'vs', lastMessageCount);
+                    lastMessageCount = messages.length;
+                    
+                    let transcript = '';
+                    let lastCustomerMessage = '';
+                    
+                    messages.forEach(msg => {
+                        const isCustomer = msg.author_id?.startsWith('customer') || 
+                                           (msg.author_id && !msg.author_id.includes('@'));
+                        const author = isCustomer ? 'Customer' : 'Agent';
+                        const text = msg.text || '';
+                        transcript += author + ': ' + text + '\n';
+                        
+                        if (isCustomer) {
+                            lastCustomerMessage = text;
+                        }
+                    });
+                    
+                    currentTranscript = transcript;
+                    await getSuggestions(lastCustomerMessage);
+                }
+                
+            } catch (error) {
+                console.error('[Copilot] Poll error:', error);
+            } finally {
+                isRefreshing = false;
+            }
+        }
+        
+        async function getSuggestions(lastMessage) {
+            const requestId = currentRequestId;
+            const chatIdAtRequest = currentChatId;
+            
+            try {
+                const requestBody = {
+                    chat_id: currentChatId,
+                    message_text: lastMessage || '',
+                    author_type: 'customer',
+                    transcript_so_far: currentTranscript,
+                    customer_email: currentProfile?.email || null,
+                    customer_name: currentProfile?.name || 'Visitor',
+                    chat_data: currentChatData
+                };
+                
+                console.log('[Copilot] Sending request with', {
+                    chat_id: currentChatId,
+                    transcript_length: currentTranscript.length,
+                    messages: lastMessageCount,
+                    has_chat_data: !!currentChatData
+                });
+                
+                // STAGE 1: Get A4 context immediately (fast)
+                const contextPromise = fetch(API_BASE + '/api/copilot/context', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customer_email: requestBody.customer_email,
+                        customer_name: requestBody.customer_name,
+                        customer_company: currentProfile?.fields?.company || null,
+                        transcript: currentTranscript,
+                        chat_data: currentChatData
+                    })
+                });
+                
+                // STAGE 2: Get AI suggestions (slower)
+                const suggestionsPromise = fetch(API_BASE + '/api/copilot/process-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                // Show A4 context as soon as it's ready
+                try {
+                    const contextResponse = await contextPromise;
+                    if (contextResponse.ok) {
+                        const contextData = await contextResponse.json();
+                        
+                        if (requestId === currentRequestId && chatIdAtRequest === currentChatId) {
+                            renderPartialUI(contextData, lastMessage);
+                        }
+                    }
+                } catch (e) {
+                    console.log('[Copilot] Context fetch failed, waiting for full response');
+                }
+                
+                // Now wait for full AI suggestions
+                const response = await suggestionsPromise;
+                
+                if (!response.ok) throw new Error('API error');
+                
+                const result = await response.json();
+                
+                if (requestId !== currentRequestId || chatIdAtRequest !== currentChatId) {
+                    console.log('[Copilot] Discarding stale response for chat:', chatIdAtRequest, 
+                                '(current:', currentChatId, ')');
+                    return;
+                }
+                
+                const newText = result.suggestions?.primary_response || '';
+                const oldText = lastResponse?.suggestions?.primary_response || '';
+                const isUpdate = lastResponse && newText !== oldText;
+                
+                lastResponse = result;
+                renderUI(result, isUpdate);
+                
+            } catch (error) {
+                console.error('[Copilot] Error getting suggestions:', error);
+                if (!lastResponse) {
+                    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.name === 'TypeError') {
+                        showOffline();
+                    } else {
+                        showError('Failed to get suggestions');
+                    }
+                }
+            }
+        }
+        
+        function renderPartialUI(contextData, lastMessage) {
+            const ctx = contextData || {};
+            const app = document.getElementById('app');
+            
+            let html = '';
+            
+            html += '<div class="response-hero">';
+            html += '<div class="response-label">✨ GENERATING RESPONSE...</div>';
+            html += '<div class="response-text" style="color: var(--text-dim); font-style: italic;">';
+            if (lastMessage) {
+                html += 'Analyzing: "' + escapeHtml(lastMessage.substring(0, 80)) + (lastMessage.length > 80 ? '...' : '') + '"';
+            } else {
+                html += 'Preparing response...';
+            }
+            html += '</div>';
+            html += '<div style="padding: 12px 16px;"><div class="loading-spinner"></div></div>';
+            html += '</div>';
+            
+            if (ctx.matched && ctx.client) {
+                html += '<div class="context-section open">';
+                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                html += '<div class="context-title">📊 A4 Account <span class="context-badge match">FOUND</span></div>';
+                html += '<span class="context-arrow">▼</span>';
+                html += '</div>';
+                html += '<div class="context-body">';
+                html += '<div class="context-row"><span class="label">Client</span><span class="value">' + escapeHtml(ctx.client.name || '-') + '</span></div>';
+                if (ctx.account_summary) {
+                    html += '<div class="context-row"><span class="label">Lifetime</span><span class="value" style="color: var(--accent);">$' + (ctx.account_summary.lifetime_revenue || 0).toLocaleString() + '</span></div>';
+                }
+                html += '</div></div>';
+                
+                if (ctx.open_quotes && ctx.open_quotes.length > 0) {
+                    html += '<div class="context-section">';
+                    html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                    html += '<div class="context-title">📝 Open Quotes (' + ctx.open_quotes.length + ')</div>';
+                    html += '<span class="context-arrow">▼</span>';
+                    html += '</div>';
+                    html += '<div class="context-body">';
+                    ctx.open_quotes.slice(0, 5).forEach(function(q) {
+                        html += '<div class="context-row"><span class="label">#' + escapeHtml(q.refnum) + '</span><span class="value">$' + (q.total || 0).toLocaleString() + '</span></div>';
+                    });
+                    html += '</div></div>';
+                }
+                
+                if (ctx.recent_orders && ctx.recent_orders.length > 0) {
+                    html += '<div class="context-section">';
+                    html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                    html += '<div class="context-title">📦 Recent Orders (' + ctx.recent_orders.length + ')</div>';
+                    html += '<span class="context-arrow">▼</span>';
+                    html += '</div>';
+                    html += '<div class="context-body">';
+                    ctx.recent_orders.slice(0, 5).forEach(function(o) {
+                        html += '<div class="context-row"><span class="label">#' + escapeHtml(o.refnum) + '</span><span class="value">$' + (o.total || 0).toLocaleString() + '</span></div>';
+                    });
+                    html += '</div></div>';
+                }
+            } else {
+                html += '<div class="context-section">';
+                html += '<div class="context-header">';
+                html += '<div class="context-title">📊 A4 Account <span class="context-badge" style="background: var(--text-dim);">SEARCHING...</span></div>';
+                html += '</div></div>';
+            }
+            
+            app.innerHTML = html;
+        }
+        
+        function renderUI(result, isUpdate) {
+            const ctx = result.customer_context || {};
+            const sug = result.suggestions || {};
+            const lc = result.livechat_context || {};
+            const app = document.getElementById('app');
+            
+            let html = '';
+            
+            html += '<div class="status-bar">';
+            html += '<span><span class="status-dot live"></span>' + lastMessageCount + ' messages</span>';
+            html += '<span>' + escapeHtml(currentProfile?.name || 'Visitor') + '</span>';
+            html += '</div>';
+            
+            if (sug.primary_response) {
+                html += '<div class="response-hero' + (isUpdate ? ' updated' : '') + '">';
+                html += '<div class="response-label">✨ SUGGESTED RESPONSE</div>';
+                html += '<div class="response-text">' + escapeHtml(sug.primary_response) + '</div>';
+                html += '<button class="use-btn" onclick="useResponse(this, \'' + escapeJs(sug.primary_response) + '\')">';
+                html += '📋 USE THIS RESPONSE</button>';
+                
+                html += '<div class="feedback-buttons">';
+                html += '<button class="feedback-btn thumbs-up" onclick="sendFeedback(\'thumbs_up\')" title="This was helpful">👍</button>';
+                html += '<button class="feedback-btn thumbs-down" onclick="sendFeedback(\'thumbs_down\')" title="Not helpful">👎</button>';
+                html += '<button class="feedback-btn edited" onclick="sendFeedback(\'edited\')" title="I used this but edited it">✏️</button>';
+                html += '</div>';
+                
+                html += '</div>';
+                
+                currentSuggestionId = result.suggestion_id || null;
+            }
+            
+            if (sug.recommended_actions && sug.recommended_actions.length > 0) {
+                const action = sug.recommended_actions[0];
+                if (action && action.tool && action.tool !== 'no_action') {
+                    html += '<div class="action-bar">';
+                    html += '💡 <strong>' + formatAction(action.tool) + '</strong>';
+                    if (action.reason) html += ' • ' + escapeHtml(action.reason);
+                    html += '</div>';
+                }
+            }
+            
+            if (sug.alternatives && sug.alternatives.length > 0) {
+                html += '<div class="alternatives">';
+                html += '<div class="alt-label">Or try:</div>';
+                sug.alternatives.slice(0, 2).forEach(function(alt) {
+                    html += '<div class="alt-item" onclick="useResponse(null, \'' + escapeJs(alt) + '\')">' + escapeHtml(alt) + '</div>';
+                });
+                html += '</div>';
+            }
+            
+            if (ctx.matched && ctx.client) {
+                html += '<div class="context-section open">';
+                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                html += '<div class="context-title">📊 A4 Account <span class="context-badge match">FOUND</span></div>';
+                html += '<span class="context-arrow">▼</span>';
+                html += '</div>';
+                html += '<div class="context-body">';
+                html += '<div class="context-row"><span class="label">Client</span><span class="value">' + escapeHtml(ctx.client.name || '-') + '</span></div>';
+                if (ctx.account_summary) {
+                    html += '<div class="context-row"><span class="label">Lifetime</span><span class="value" style="color: var(--accent);">$' + (ctx.account_summary.lifetime_revenue || 0).toLocaleString() + '</span></div>';
+                    if (ctx.account_summary.star_rating) {
+                        html += '<div class="context-row"><span class="label">Rating</span><span class="value">' + '⭐'.repeat(ctx.account_summary.star_rating) + '</span></div>';
+                    }
+                }
+                html += '</div></div>';
+                
+                if (ctx.open_quotes && ctx.open_quotes.length > 0) {
+                    html += '<div class="context-section">';
+                    html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                    html += '<div class="context-title">📝 Open Quotes (' + ctx.open_quotes.length + ')</div>';
+                    html += '<span class="context-arrow">▼</span>';
+                    html += '</div>';
+                    html += '<div class="context-body">';
+                    ctx.open_quotes.slice(0, 5).forEach(function(q) {
+                        html += '<div class="context-row"><span class="label">#' + escapeHtml(q.refnum) + '</span><span class="value">$' + (q.total || 0).toLocaleString() + '</span></div>';
+                    });
+                    html += '</div></div>';
+                }
+                
+                if (ctx.recent_orders && ctx.recent_orders.length > 0) {
+                    html += '<div class="context-section">';
+                    html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                    html += '<div class="context-title">📦 Recent Orders (' + ctx.recent_orders.length + ')</div>';
+                    html += '<span class="context-arrow">▼</span>';
+                    html += '</div>';
+                    html += '<div class="context-body">';
+                    ctx.recent_orders.slice(0, 5).forEach(function(o) {
+                        html += '<div class="context-row"><span class="label">#' + escapeHtml(o.refnum) + '</span><span class="value">$' + (o.total || 0).toLocaleString() + '</span></div>';
+                    });
+                    html += '</div></div>';
+                }
+            } else {
+                html += '<div class="context-section open">';
+                html += '<div class="context-header">';
+                html += '<div class="context-title">📊 A4 Account <span class="context-badge new">NEW CUSTOMER</span></div>';
+                html += '</div>';
+                html += '<div class="context-body">';
+                html += '<div style="font-size: 12px; color: var(--text-dim);">No account history in A4</div>';
+                html += '<div style="font-size: 11px; color: var(--warning); margin-top: 6px;">→ Collect company info for follow-up</div>';
+                html += '</div></div>';
+            }
+            
+            if (ctx.mentioned_refs && ctx.mentioned_refs.length > 0) {
+                html += '<div class="context-section open">';
+                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                html += '<div class="context-title">🔍 Referenced in Chat</div>';
+                html += '<span class="context-arrow">▼</span>';
+                html += '</div>';
+                html += '<div class="context-body">';
+                ctx.mentioned_refs.forEach(function(ref) {
+                    html += '<div class="context-row">';
+                    html += '<span class="label">#' + escapeHtml(ref.refnum) + ' (' + escapeHtml(ref.type || 'Quote') + ')</span>';
+                    html += '<span class="value">$' + (ref.total || 0).toLocaleString() + '</span>';
+                    html += '</div>';
+                    if (ref.client) {
+                        html += '<div style="font-size: 10px; color: var(--text-dim); margin-bottom: 4px;">For: ' + escapeHtml(ref.client) + '</div>';
+                    }
+                });
+                html += '</div></div>';
+            }
+            
+            if (sug.tool_calls && sug.tool_calls.length > 0) {
+                html += '<div class="context-section">';
+                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                html += '<div class="context-title">🔧 AI Searched (' + sug.tool_calls.length + ' lookups)</div>';
+                html += '<span class="context-arrow">▶</span>';
+                html += '</div>';
+                html += '<div class="context-body" style="display: none;">';
+                sug.tool_calls.forEach(function(tc) {
+                    var status = tc.result && tc.result.found ? '✓' : tc.result && tc.result.error ? '✗' : '•';
+                    var statusColor = tc.result && tc.result.found ? '#4CAF50' : tc.result && tc.result.error ? '#f44336' : 'inherit';
+                    html += '<div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px; padding: 4px; background: var(--bg); border-radius: 4px;">';
+                    html += '<span style="color: ' + statusColor + ';">' + status + '</span> ';
+                    html += '<strong>' + escapeHtml(tc.tool) + '</strong>';
+                    if (tc.args) {
+                        var argStr = Object.entries(tc.args).map(function(e) { return e[0] + '=' + e[1]; }).join(', ');
+                        html += ' <span style="opacity: 0.7;">(' + escapeHtml(argStr) + ')</span>';
+                    }
+                    html += '</div>';
+                });
+                html += '</div></div>';
+            }
+            
+            if (sug.context_notes && sug.context_notes.length > 0) {
+                html += '<div class="context-section open">';
+                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                html += '<div class="context-title">💡 Agent Notes</div>';
+                html += '<span class="context-arrow">▼</span>';
+                html += '</div>';
+                html += '<div class="context-body">';
+                sug.context_notes.forEach(function(note) {
+                    html += '<div style="font-size: 12px; color: var(--text); margin-bottom: 6px; padding: 6px; background: var(--bg); border-radius: 4px;">• ' + escapeHtml(note) + '</div>';
+                });
+                html += '</div></div>';
+            }
+            
+            if (!sug.primary_response) {
+                html = '<div class="state-container">';
+                html += '<div class="state-icon">💬</div>';
+                html += '<div class="state-text">Waiting for customer message...</div>';
+                html += '</div>';
+            }
+            
+            app.innerHTML = html;
+        }
+        
+        function toggleSection(el) {
+            el.classList.toggle('open');
+        }
+        
+        async function useResponse(btn, text) {
+            if (currentSuggestionId) {
+                await sendFeedback('used', false);
+            }
+            
+            if (widget) {
+                try {
+                    await widget.putMessage(text);
+                    showToast('Added to message box!');
+                    if (btn) {
+                        btn.classList.add('copied');
+                        btn.textContent = '✓ ADDED';
+                        setTimeout(function() {
+                            btn.classList.remove('copied');
+                            btn.innerHTML = '📋 USE THIS RESPONSE';
+                        }, 2000);
+                    }
+                } catch (e) {
+                    copyToClipboard(text);
+                }
+            } else {
+                copyToClipboard(text);
+            }
+        }
+        
+        async function sendFeedback(feedbackType, showToastMsg = true) {
+            if (!currentSuggestionId) {
+                console.warn('[Copilot] No suggestion_id available for feedback');
+                return;
+            }
+            
+            try {
+                const response = await fetch(API_BASE + '/api/feedback/explicit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        suggestion_id: currentSuggestionId,
+                        feedback_type: feedbackType
+                    })
+                });
+                
+                if (response.ok) {
+                    const buttons = document.querySelectorAll('.feedback-btn');
+                    buttons.forEach(btn => btn.classList.remove('active'));
+                    
+                    const activeBtn = document.querySelector(`.feedback-btn.${feedbackType === 'thumbs_up' ? 'thumbs-up' : feedbackType === 'thumbs_down' ? 'thumbs-down' : 'edited'}`);
+                    if (activeBtn) {
+                        activeBtn.classList.add('active');
+                    }
+                    
+                    if (showToastMsg) {
+                        const messages = {
+                            'thumbs_up': 'Thanks for the feedback! 👍',
+                            'thumbs_down': 'Thanks for the feedback! 👎',
+                            'edited': 'Thanks for the feedback! ✏️',
+                            'used': ''
+                        };
+                        if (messages[feedbackType]) {
+                            showToast(messages[feedbackType]);
+                        }
+                    }
+                } else {
+                    console.error('[Copilot] Feedback API error:', response.status);
+                }
+            } catch (error) {
+                console.error('[Copilot] Error sending feedback:', error);
+            }
+        }
+        
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(function() {
+                showToast('Copied to clipboard!');
+            });
+        }
+        
+        function formatAction(tool) {
+            const actions = {
+                'lookup_quote': 'Look up quote',
+                'lookup_order': 'Look up order',
+                'create_quote': 'Create quote',
+                'transfer_sales': 'Transfer to Sales',
+                'transfer_engineering': 'Transfer to Engineering',
+                'send_link': 'Send product link',
+                'schedule_callback': 'Schedule callback'
+            };
+            return actions[tool] || tool;
+        }
+        
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.classList.add('show');
+            setTimeout(function() { toast.classList.remove('show'); }, 2500);
+        }
+        
+        function showLoading() {
+            document.getElementById('app').innerHTML = 
+                '<div class="state-container"><div class="spinner"></div><div class="state-text">Analyzing chat...</div></div>';
+        }
+        
+        function showWaiting() {
+            document.getElementById('app').innerHTML = 
+                '<div class="state-container"><div class="state-icon">💬</div><div class="state-text">Select a chat to get started</div></div>';
+        }
+        
+        function showError(msg) {
+            document.getElementById('app').innerHTML = '<div class="error-box">' + escapeHtml(msg) + '</div>';
+        }
+        
+        function showOffline() {
+            document.getElementById('app').innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 24px; text-align: center;">
+                    <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;">🔌</div>
+                    <div style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px;">Copilot Offline</div>
+                    <div style="font-size: 12px; color: var(--text-dim); max-width: 240px; line-height: 1.5;">
+                        Please contact <strong>Andre Vignau</strong><br>
+                        <a href="mailto:andre@terrauniversal.com" style="color: var(--accent);">andre@terrauniversal.com</a><br>
+                        to start the AI Copilot server.
+                    </div>
+                    <button onclick="location.reload()" style="margin-top: 16px; padding: 8px 16px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;">
+                        Retry Connection
+                    </button>
+                </div>
+            `;
+        }
+        
+        // ============ TEST MODE ============
+        function showTestMode() {
+            const app = document.getElementById('app');
+            app.innerHTML = '<div class="test-mode">' +
+                '<div class="test-title">🧪 Standalone Test Mode</div>' +
+                '<div class="form-group">' +
+                '<label>Customer Email</label>' +
+                '<input type="email" id="test-email" placeholder="customer@company.com">' +
+                '</div>' +
+                '<div class="form-group">' +
+                '<label>Customer Name</label>' +
+                '<input type="text" id="test-name" value="Test Customer">' +
+                '</div>' +
+                '<div class="form-group">' +
+                '<label>Customer Message</label>' +
+                '<textarea id="test-message" rows="3" placeholder="I need a quote for a cleanroom..."></textarea>' +
+                '</div>' +
+                '<button class="test-btn" onclick="runTest()">Get AI Suggestions</button>' +
+                '</div>' +
+                '<div id="test-results"></div>';
+        }
+        
+        async function runTest() {
+            const email = document.getElementById('test-email').value;
+            const name = document.getElementById('test-name').value || 'Test Customer';
+            const message = document.getElementById('test-message').value;
+            
+            if (!message.trim()) {
+                showToast('Enter a message first');
+                return;
+            }
+            
+            currentProfile = { email: email, name: name };
+            currentTranscript = 'Customer: ' + message;
+            
+            document.getElementById('test-results').innerHTML = 
+                '<div class="state-container"><div class="spinner"></div><div class="state-text">Analyzing...</div></div>';
+            
+            try {
+                const response = await fetch(API_BASE + '/api/copilot/process-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: 'test-' + Date.now(),
+                        message_text: message,
+                        author_type: 'customer',
+                        transcript_so_far: currentTranscript,
+                        customer_email: email || null,
+                        customer_name: name
+                    })
+                });
+                
+                if (!response.ok) throw new Error('API error: ' + response.status);
+                
+                const result = await response.json();
+                const ctx = result.customer_context || {};
+                const sug = result.suggestions || {};
+                
+                let html = '';
+                
+                if (sug.primary_response) {
+                    html += '<div class="response-hero">';
+                    html += '<div class="response-label">✨ SUGGESTED RESPONSE</div>';
+                    html += '<div class="response-text">' + escapeHtml(sug.primary_response) + '</div>';
+                    html += '<button class="use-btn" onclick="copyToClipboard(\'' + escapeJs(sug.primary_response) + '\')">';
+                    html += '📋 COPY RESPONSE</button>';
+                    html += '</div>';
+                    
+                    if (sug.alternatives && sug.alternatives.length > 0) {
+                        html += '<div class="alternatives">';
+                        html += '<div class="alt-label">Alternatives:</div>';
+                        sug.alternatives.slice(0, 2).forEach(function(alt) {
+                            html += '<div class="alt-item" onclick="copyToClipboard(\'' + escapeJs(alt) + '\')">' + escapeHtml(alt) + '</div>';
+                        });
+                        html += '</div>';
+                    }
+                    
+                    html += '<div style="padding: 12px 16px; font-size: 12px; color: var(--text-dim);">';
+                    if (ctx.matched && ctx.client) {
+                        html += '✓ A4: ' + escapeHtml(ctx.client.name);
+                        if (ctx.account_summary && ctx.account_summary.lifetime_revenue) {
+                            html += ' • $' + (ctx.account_summary.lifetime_revenue || 0).toLocaleString() + ' lifetime';
+                        }
+                    } else {
+                        html += 'ℹ New customer (no A4 record)';
+                    }
+                    html += '</div>';
+                } else {
+                    html = '<div class="error-box">No suggestion generated.</div>';
+                }
+                
+                document.getElementById('test-results').innerHTML = html;
+                
+            } catch (error) {
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error-box">Error: ' + escapeHtml(error.message) + '</div>';
+            }
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return '';
+            var div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function escapeJs(text) {
+            if (!text) return '';
+            return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '');
+        }
+        
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
+
