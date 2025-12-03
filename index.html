@@ -507,7 +507,11 @@
                 });
                 
                 currentTranscript = transcript;
-                await getSuggestions(lastCustomerMessage);
+                
+                // Only get AI suggestions if there's a customer message
+                if (lastCustomerMessage) {
+                    await getSuggestions(lastCustomerMessage);
+                }
                 
             } catch (error) {
                 console.error('[Copilot] Error fetching chat:', error);
@@ -562,7 +566,11 @@
                     });
                     
                     currentTranscript = transcript;
-                    await getSuggestions(lastCustomerMessage);
+                    
+                    // Re-analyze only if there's a customer message
+                    if (lastCustomerMessage) {
+                        await getSuggestions(lastCustomerMessage);
+                    }
                 }
                 
             } catch (error) {
