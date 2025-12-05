@@ -387,6 +387,10 @@
         let pollInterval = null;
         let isRefreshing = false;
         let currentRequestId = 0;
+        let lastFetchTime = 0;  // Throttle fetches
+        
+        const FALLBACK_POLL_INTERVAL = 60000; // 60s fallback if no new messages
+        const MIN_FETCH_INTERVAL = 10000; // 10s minimum between fetches for same chat
         
         const isStandalone = window.self === window.top;
         
@@ -440,7 +444,10 @@
             }
             
             const newChatId = profile.chat.chat_id;
-            if (newChatId !== currentChatId) {
+            const isNewChat = newChatId !== currentChatId;
+            const now = Date.now();
+            
+            if (isNewChat) {
                 currentRequestId++;
                 currentChatId = newChatId;
                 currentProfile = profile;
@@ -449,13 +456,24 @@
                 lastMessageCount = 0;
                 lastResponse = null;
                 currentSuggestionId = null;
+                lastFetchTime = 0;  // Reset throttle for new chat
                 
                 console.log('[Copilot] Switched to new chat:', newChatId, 'requestId:', currentRequestId);
                 showLoading();
+                
+                // Fetch immediately for new chats
+                lastFetchTime = now;
+                await fetchChatAndAnalyze();
+                
+                // Start fallback polling for new messages
+                pollInterval = setInterval(checkForNewMessages, FALLBACK_POLL_INTERVAL);
+            } else if ((now - lastFetchTime) >= MIN_FETCH_INTERVAL) {
+                // For existing chats: throttled refresh to catch new messages
+                console.log('[Copilot] Throttled refresh for existing chat');
+                lastFetchTime = now;
+                await checkForNewMessages();
             }
-            
-            await fetchChatAndAnalyze();
-            pollInterval = setInterval(checkForNewMessages, 3000);
+            // Otherwise: profile event ignored (too soon since last fetch)
         }
         
         async function fetchChatAndAnalyze() {
