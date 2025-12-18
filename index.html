@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Terra AI Copilot</title>
     <script src="https://unpkg.com/@livechat/agent-app-sdk@1.6.3/dist/agentapp.umd.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -375,6 +376,8 @@
         // CONFIGURATION - Update this URL to your ngrok tunnel
         // =====================================================
         const API_BASE = 'https://livechataiagent.ngrok.app';
+        // Bump this to confirm the LiveChat sidebar is loading the latest widget HTML (cache bust sanity check)
+        const COPILOT_WIDGET_VERSION = '2025-12-18.1';
         
         let widget = null;
         let currentChatId = null;
@@ -389,7 +392,10 @@
         let currentRequestId = 0;
         let lastFetchTime = 0;  // Throttle fetches
         
-        const FALLBACK_POLL_INTERVAL = 60000; // 60s fallback if no new messages
+        // WebSocket connection for real-time updates
+        let socket = null;
+        let socketConnected = false;
+        const FALLBACK_POLL_INTERVAL = 60000; // 60s fallback if WebSocket disconnects
         const MIN_FETCH_INTERVAL = 10000; // 10s minimum between fetches for same chat
         
         const isStandalone = window.self === window.top;
@@ -416,6 +422,9 @@
                 return;
             }
             
+            // Initialize WebSocket connection
+            initWebSocket();
+            
             try {
                 widget = await LiveChat.createDetailsWidget();
                 widget.on('customer_profile', handleProfileChange);
@@ -432,10 +441,115 @@
             }
         }
         
+        function initWebSocket() {
+            // Connect to WebSocket server for real-time updates
+            try {
+                socket = io(API_BASE, {
+                    transports: ['websocket', 'polling'],
+                    reconnection: true,
+                    reconnectionAttempts: 5,
+                    reconnectionDelay: 1000,
+                    timeout: 10000,
+                });
+                
+                socket.on('connect', () => {
+                    console.log('[WebSocket] Connected:', socket.id);
+                    socketConnected = true;
+                    
+                    // If we already have a chat, join the room
+                    if (currentChatId) {
+                        socket.emit('join_chat', { chat_id: currentChatId });
+                    }
+                    
+                    // Clear fallback polling if it was running
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
+                        console.log('[WebSocket] Cleared fallback polling');
+                    }
+                });
+                
+                socket.on('disconnect', (reason) => {
+                    console.log('[WebSocket] Disconnected:', reason);
+                    socketConnected = false;
+                    
+                    // Start fallback polling when WebSocket disconnects
+                    if (!pollInterval && currentChatId) {
+                        console.log('[WebSocket] Starting fallback polling (60s)');
+                        pollInterval = setInterval(checkForNewMessages, FALLBACK_POLL_INTERVAL);
+                    }
+                });
+                
+                socket.on('connect_error', (error) => {
+                    console.error('[WebSocket] Connection error:', error.message);
+                    socketConnected = false;
+                });
+                
+                socket.on('joined', (data) => {
+                    console.log('[WebSocket] Joined chat room:', data.chat_id);
+                });
+                
+                // Handle real-time copilot updates from webhook
+                socket.on('copilot_update', (data) => {
+                    console.log('[WebSocket] Received copilot_update:', data.chat_id);
+                    
+                    // Only process if it's for the current chat
+                    if (data.chat_id !== currentChatId) {
+                        console.log('[WebSocket] Ignoring update for different chat');
+                        return;
+                    }
+                    
+                    // Process the copilot result
+                    const copilotResult = data.copilot || {};
+                    
+                    const result = {
+                        suggestions: {
+                            primary_response: copilotResult.suggestions?.primary_response || '',
+                            alternatives: copilotResult.suggestions?.alternatives || [],
+                            detected_intent: copilotResult.suggestions?.detected_intent || null,
+                            recommended_actions: copilotResult.suggestions?.recommended_actions || [],
+                            tool_calls: copilotResult.suggestions?.tool_calls || [],
+                            context_notes: copilotResult.suggestions?.context_notes || [],
+                            agent_product_links: copilotResult.suggestions?.agent_product_links || [],
+                        },
+                        customer_context: copilotResult.customer_context || null,
+                        livechat_context: copilotResult.livechat_context || {},
+                        suggestion_id: copilotResult.suggestion_id || null,
+                    };
+                    
+                    // Update message count if provided
+                    if (data.message_count) {
+                        lastMessageCount = data.message_count;
+                    }
+                    
+                    // Check if this is a new response
+                    const newText = result.suggestions?.primary_response || '';
+                    const oldText = lastResponse?.suggestions?.primary_response || '';
+                    const isUpdate = lastResponse && newText !== oldText;
+                    
+                    lastResponse = result;
+                    currentSuggestionId = result.suggestion_id;
+                    
+                    renderUI(result, isUpdate);
+                    
+                    console.log('[WebSocket] UI updated with real-time suggestion');
+                });
+                
+            } catch (error) {
+                console.error('[WebSocket] Init error:', error);
+                socketConnected = false;
+            }
+        }
+        
         async function handleProfileChange(profile) {
             if (pollInterval) {
                 clearInterval(pollInterval);
                 pollInterval = null;
+            }
+            
+            // Leave previous chat room if WebSocket connected
+            if (socket && socketConnected && currentChatId) {
+                socket.emit('leave_chat', { chat_id: currentChatId });
             }
             
             if (!profile || !profile.chat) {
@@ -456,24 +570,34 @@
                 lastMessageCount = 0;
                 lastResponse = null;
                 currentSuggestionId = null;
-                lastFetchTime = 0;  // Reset throttle for new chat
+                lastFetchTime = 0;  // Reset fetch throttle for new chat
                 
                 console.log('[Copilot] Switched to new chat:', newChatId, 'requestId:', currentRequestId);
                 showLoading();
+                
+                // Join the chat room for real-time updates
+                if (socket && socketConnected) {
+                    socket.emit('join_chat', { chat_id: newChatId });
+                    console.log('[Copilot] Joined WebSocket room for chat:', newChatId);
+                }
                 
                 // Fetch immediately for new chats
                 lastFetchTime = now;
                 await fetchChatAndAnalyze();
                 
-                // Start fallback polling for new messages
-                pollInterval = setInterval(checkForNewMessages, FALLBACK_POLL_INTERVAL);
-            } else if ((now - lastFetchTime) >= MIN_FETCH_INTERVAL) {
-                // For existing chats: throttled refresh to catch new messages
-                console.log('[Copilot] Throttled refresh for existing chat');
+                // Only use polling as fallback if WebSocket is not connected
+                if (!socketConnected) {
+                    console.log('[Copilot] WebSocket not connected, using fallback polling (60s)');
+                    pollInterval = setInterval(checkForNewMessages, FALLBACK_POLL_INTERVAL);
+                }
+            } else if (!socketConnected && (now - lastFetchTime) >= MIN_FETCH_INTERVAL) {
+                // For existing chats without WebSocket: throttled refresh to catch new messages
+                // This is a safety net - normally WebSocket pushes updates
+                console.log('[Copilot] Throttled refresh for existing chat (no WebSocket)');
                 lastFetchTime = now;
                 await checkForNewMessages();
             }
-            // Otherwise: profile event ignored (too soon since last fetch)
+            // With WebSocket connected, updates come via copilot_update events
         }
         
         async function fetchChatAndAnalyze() {
@@ -585,7 +709,7 @@
                     
                     currentTranscript = transcript;
                     
-                    // Re-analyze only if there's a customer message
+                    // Re-analyze with new data only if there's a customer message
                     if (lastCustomerMessage) {
                         await getSuggestions(lastCustomerMessage);
                     }
@@ -647,7 +771,8 @@
                         const contextData = await contextResponse.json();
                         
                         if (requestId === currentRequestId && chatIdAtRequest === currentChatId) {
-                            renderPartialUI(contextData, lastMessage);
+                            const ctx = contextData && (contextData.customer_context || contextData.context || contextData);
+                            renderPartialUI(ctx, lastMessage);
                         }
                     }
                 } catch (e) {
@@ -659,7 +784,38 @@
                 
                 if (!response.ok) throw new Error('API error');
                 
-                const result = await response.json();
+                const raw = await response.json();
+                
+                const result = {
+                    suggestions: {
+                        primary_response: raw.suggestions?.primary_response 
+                            || raw.suggestion?.suggestion 
+                            || '',
+                        alternatives: raw.suggestions?.alternatives 
+                            || raw.suggestion?.alternatives 
+                            || [],
+                        detected_intent: raw.suggestions?.detected_intent 
+                            || raw.suggestion?.intent 
+                            || null,
+                        recommended_actions: raw.suggestions?.recommended_actions 
+                            || raw.suggestion?.recommended_actions 
+                            || [],
+                        tool_calls: raw.suggestions?.tool_calls
+                            || raw.suggestion?.tool_calls
+                            || [],
+                        context_notes: raw.suggestions?.context_notes
+                            || raw.suggestion?.context_notes
+                            || [],
+                        agent_product_links: raw.suggestions?.agent_product_links
+                            || raw.suggestion?.agent_product_links
+                            || [],
+                    },
+                    customer_context: raw.customer_context 
+                        || raw.context 
+                        || null,
+                    livechat_context: raw.livechat_context || {},
+                    suggestion_id: raw.suggestion_id || raw.suggestion?.suggestion_id || null,
+                };
                 
                 if (requestId !== currentRequestId || chatIdAtRequest !== currentChatId) {
                     console.log('[Copilot] Discarding stale response for chat:', chatIdAtRequest, 
@@ -704,7 +860,16 @@
             html += '<div style="padding: 12px 16px;"><div class="loading-spinner"></div></div>';
             html += '</div>';
             
-            if (ctx.matched && ctx.client) {
+            if (ctx.error) {
+                html += '<div class="context-section open">';
+                html += '<div class="context-header">';
+                html += '<div class="context-title">📊 A4 Account <span class="context-badge new" style="background: rgba(244, 67, 54, 0.2); color: #f44336;">A4 ERROR</span></div>';
+                html += '</div>';
+                html += '<div class="context-body">';
+                html += '<div style="font-size: 12px; color: #f44336;">' + escapeHtml(String(ctx.error).slice(0, 180)) + '</div>';
+                html += '<div style="font-size: 11px; color: var(--text-dim); margin-top: 6px;">→ A4 is at its connection limit. Retry in a moment.</div>';
+                html += '</div></div>';
+            } else if (ctx.matched && ctx.client) {
                 html += '<div class="context-section open">';
                 html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
                 html += '<div class="context-title">📊 A4 Account <span class="context-badge match">FOUND</span></div>';
@@ -717,6 +882,7 @@
                 }
                 html += '</div></div>';
                 
+                // Open Quotes (Active, within 1 year)
                 if (ctx.open_quotes && ctx.open_quotes.length > 0) {
                     html += '<div class="context-section">';
                     html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
@@ -725,11 +891,26 @@
                     html += '</div>';
                     html += '<div class="context-body">';
                     ctx.open_quotes.slice(0, 5).forEach(function(q) {
-                        html += '<div class="context-row"><span class="label">#' + escapeHtml(q.refnum) + '</span><span class="value">$' + (q.total || 0).toLocaleString() + '</span></div>';
+                        html += '<div style="padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:6px;border-left:3px solid var(--accent);">';
+                        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+                        html += '<span style="font-weight:600;color:var(--text);">#' + escapeHtml(q.refnum) + '</span>';
+                        html += '<span style="font-weight:700;color:var(--accent);">$' + (q.total || 0).toLocaleString() + '</span>';
+                        html += '</div>';
+                        var details = [];
+                        if (q.date) details.push(q.date.split('T')[0]);
+                        if (q.their_po) details.push('PO: ' + q.their_po);
+                        if (details.length > 0) {
+                            html += '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">' + escapeHtml(details.join(' • ')) + '</div>';
+                        }
+                        if (q.followup) {
+                            html += '<div style="font-size:10px;color:#f0ad4e;margin-top:2px;">📅 F/U: ' + q.followup.split('T')[0] + '</div>';
+                        }
+                        html += '</div>';
                     });
                     html += '</div></div>';
                 }
                 
+                // Recent Orders (within 90 days)
                 if (ctx.recent_orders && ctx.recent_orders.length > 0) {
                     html += '<div class="context-section">';
                     html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
@@ -738,7 +919,31 @@
                     html += '</div>';
                     html += '<div class="context-body">';
                     ctx.recent_orders.slice(0, 5).forEach(function(o) {
-                        html += '<div class="context-row"><span class="label">#' + escapeHtml(o.refnum) + '</span><span class="value">$' + (o.total || 0).toLocaleString() + '</span></div>';
+                        var releasedColor = o.released ? '#4CAF50' : '#888';
+                        var releasedIcon = o.released ? '✓' : '○';
+                        html += '<div style="padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:6px;border-left:3px solid ' + releasedColor + ';">';
+                        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+                        html += '<span style="font-weight:600;color:var(--text);">#' + escapeHtml(o.refnum) + '</span>';
+                        html += '<span style="font-weight:700;color:var(--accent);">$' + (o.total || 0).toLocaleString() + '</span>';
+                        html += '</div>';
+                        var details = [];
+                        if (o.date) details.push('Entered: ' + o.date.split('T')[0]);
+                        if (o.their_po) details.push('PO: ' + o.their_po);
+                        if (details.length > 0) {
+                            html += '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">' + escapeHtml(details.join(' • ')) + '</div>';
+                        }
+                        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:3px;">';
+                        if (o.released) {
+                            var relDate = o.released_date ? ' ' + o.released_date.split('T')[0] : '';
+                            html += '<span style="font-size:10px;color:#4CAF50;">' + releasedIcon + ' Released' + relDate + '</span>';
+                        } else {
+                            html += '<span style="font-size:10px;color:#f0ad4e;">' + releasedIcon + ' Pending Release</span>';
+                        }
+                        if (o.est_ship && o.est_ship !== 'None') {
+                            html += '<span style="font-size:10px;color:#42a5f5;">🚚 ESD: ' + o.est_ship.split('T')[0] + '</span>';
+                        }
+                        html += '</div>';
+                        html += '</div>';
                     });
                     html += '</div></div>';
                 }
@@ -761,7 +966,7 @@
             let html = '';
             
             html += '<div class="status-bar">';
-            html += '<span><span class="status-dot live"></span>' + lastMessageCount + ' messages</span>';
+            html += '<span><span class="status-dot live"></span>' + lastMessageCount + ' messages • v' + COPILOT_WIDGET_VERSION + '</span>';
             html += '<span>' + escapeHtml(currentProfile?.name || 'Visitor') + '</span>';
             html += '</div>';
             
@@ -818,6 +1023,7 @@
                 }
                 html += '</div></div>';
                 
+                // Open Quotes (Active, within 1 year)
                 if (ctx.open_quotes && ctx.open_quotes.length > 0) {
                     html += '<div class="context-section">';
                     html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
@@ -826,11 +1032,26 @@
                     html += '</div>';
                     html += '<div class="context-body">';
                     ctx.open_quotes.slice(0, 5).forEach(function(q) {
-                        html += '<div class="context-row"><span class="label">#' + escapeHtml(q.refnum) + '</span><span class="value">$' + (q.total || 0).toLocaleString() + '</span></div>';
+                        html += '<div style="padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:6px;border-left:3px solid var(--accent);">';
+                        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+                        html += '<span style="font-weight:600;color:var(--text);">#' + escapeHtml(q.refnum) + '</span>';
+                        html += '<span style="font-weight:700;color:var(--accent);">$' + (q.total || 0).toLocaleString() + '</span>';
+                        html += '</div>';
+                        var details = [];
+                        if (q.date) details.push(q.date.split('T')[0]);
+                        if (q.their_po) details.push('PO: ' + q.their_po);
+                        if (details.length > 0) {
+                            html += '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">' + escapeHtml(details.join(' • ')) + '</div>';
+                        }
+                        if (q.followup) {
+                            html += '<div style="font-size:10px;color:#f0ad4e;margin-top:2px;">📅 F/U: ' + q.followup.split('T')[0] + '</div>';
+                        }
+                        html += '</div>';
                     });
                     html += '</div></div>';
                 }
                 
+                // Recent Orders (within 90 days)
                 if (ctx.recent_orders && ctx.recent_orders.length > 0) {
                     html += '<div class="context-section">';
                     html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
@@ -839,7 +1060,31 @@
                     html += '</div>';
                     html += '<div class="context-body">';
                     ctx.recent_orders.slice(0, 5).forEach(function(o) {
-                        html += '<div class="context-row"><span class="label">#' + escapeHtml(o.refnum) + '</span><span class="value">$' + (o.total || 0).toLocaleString() + '</span></div>';
+                        var releasedColor = o.released ? '#4CAF50' : '#888';
+                        var releasedIcon = o.released ? '✓' : '○';
+                        html += '<div style="padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:6px;border-left:3px solid ' + releasedColor + ';">';
+                        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+                        html += '<span style="font-weight:600;color:var(--text);">#' + escapeHtml(o.refnum) + '</span>';
+                        html += '<span style="font-weight:700;color:var(--accent);">$' + (o.total || 0).toLocaleString() + '</span>';
+                        html += '</div>';
+                        var details = [];
+                        if (o.date) details.push('Entered: ' + o.date.split('T')[0]);
+                        if (o.their_po) details.push('PO: ' + o.their_po);
+                        if (details.length > 0) {
+                            html += '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">' + escapeHtml(details.join(' • ')) + '</div>';
+                        }
+                        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:3px;">';
+                        if (o.released) {
+                            var relDate = o.released_date ? ' ' + o.released_date.split('T')[0] : '';
+                            html += '<span style="font-size:10px;color:#4CAF50;">' + releasedIcon + ' Released' + relDate + '</span>';
+                        } else {
+                            html += '<span style="font-size:10px;color:#f0ad4e;">' + releasedIcon + ' Pending Release</span>';
+                        }
+                        if (o.est_ship && o.est_ship !== 'None') {
+                            html += '<span style="font-size:10px;color:#42a5f5;">🚚 ESD: ' + o.est_ship.split('T')[0] + '</span>';
+                        }
+                        html += '</div>';
+                        html += '</div>';
                     });
                     html += '</div></div>';
                 }
@@ -889,6 +1134,49 @@
                     if (tc.args) {
                         var argStr = Object.entries(tc.args).map(function(e) { return e[0] + '=' + e[1]; }).join(', ');
                         html += ' <span style="opacity: 0.7;">(' + escapeHtml(argStr) + ')</span>';
+                    }
+                    if (tc.result && tc.result.error) {
+                        html += '<div style="margin-top:4px;color:#f44336;opacity:0.9;">' + escapeHtml(String(tc.result.error).slice(0, 180)) + '</div>';
+                    }
+                    if (tc.tool === 'search_product' && tc.result && tc.result.found) {
+                        var pn = tc.result.part_number || '';
+                        var name = tc.result.product_name || '';
+                        var qa = tc.result.qty_available;
+                        var bo = tc.result.qty_backorder;
+                        var po = tc.result.qty_on_po;
+                        var lt = tc.result.lead_time_estimate_days;
+                        var ltn = tc.result.lead_time_sample_size;
+                        html += '<div style="margin-top:4px;color:var(--text);">#' + escapeHtml(String(pn)) + ' • ' + escapeHtml(String(name).slice(0, 60)) + '</div>';
+                        html += '<div style="margin-top:2px;color:var(--text-dim);">Qty avail: ' + escapeHtml(String(qa)) + ' • BO: ' + escapeHtml(String(bo)) + ' • On PO: ' + escapeHtml(String(po)) + '</div>';
+                        if (lt !== null && lt !== undefined) {
+                            html += '<div style="margin-top:2px;color:var(--text-dim);">Est lead time: ' + escapeHtml(String(lt)) + ' days (n=' + escapeHtml(String(ltn || 0)) + ')</div>';
+                        }
+                    }
+                    html += '</div>';
+                });
+                html += '</div></div>';
+            }
+
+            // Agent-only: related product links (only present when context warrants it)
+            if (sug.agent_product_links && sug.agent_product_links.length > 0) {
+                html += '<div class="context-section open">';
+                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                html += '<div class="context-title">🔗 Related Products (Agent-only)</div>';
+                html += '<span class="context-arrow">▼</span>';
+                html += '</div>';
+                html += '<div class="context-body">';
+                sug.agent_product_links.slice(0, 5).forEach(function(p) {
+                    var url = p.product_url || '';
+                    var pn = p.part_number || '';
+                    var name = p.product_name || '';
+                    html += '<div style="padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:6px;border-left:3px solid var(--info);">';
+                    if (url) {
+                        html += '<div style="font-weight:600;"><a href="' + escapeHtml(url) + '" target="_blank" style="color: var(--accent); text-decoration: none;">' + escapeHtml(pn || url) + '</a></div>';
+                    } else {
+                        html += '<div style="font-weight:600;color:var(--text);">' + escapeHtml(pn) + '</div>';
+                    }
+                    if (name) {
+                        html += '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">' + escapeHtml(name) + '</div>';
                     }
                     html += '</div>';
                 });
