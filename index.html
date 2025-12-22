@@ -372,9 +372,6 @@
     <div id="toast" class="toast"></div>
 
     <script>
-        // =====================================================
-        // CONFIGURATION - Update this URL to your ngrok tunnel
-        // =====================================================
         const API_BASE = 'https://livechataiagent.ngrok.app';
         // Bump this to confirm the LiveChat sidebar is loading the latest widget HTML (cache bust sanity check)
         const COPILOT_WIDGET_VERSION = '2025-12-18.1';
@@ -382,14 +379,14 @@
         let widget = null;
         let currentChatId = null;
         let currentProfile = null;
-        let currentChatData = null;
+        let currentChatData = null;  // Store full chat data
         let currentTranscript = '';
         let lastMessageCount = 0;
         let lastResponse = null;
-        let currentSuggestionId = null;
+        let currentSuggestionId = null;  // Track current suggestion for feedback
         let pollInterval = null;
         let isRefreshing = false;
-        let currentRequestId = 0;
+        let currentRequestId = 0;  // Track request ID to discard stale responses
         let lastFetchTime = 0;  // Throttle fetches
         
         // WebSocket connection for real-time updates
@@ -410,7 +407,7 @@
             try {
                 const healthCheck = await fetch(API_BASE + '/api/health', { 
                     method: 'GET',
-                    signal: AbortSignal.timeout(3000)
+                    signal: AbortSignal.timeout(3000)  // 3 second timeout
                 }).catch(() => null);
                 
                 if (!healthCheck || !healthCheck.ok) {
@@ -542,6 +539,7 @@
         }
         
         async function handleProfileChange(profile) {
+            // Stop existing polling
             if (pollInterval) {
                 clearInterval(pollInterval);
                 pollInterval = null;
@@ -557,15 +555,17 @@
                 return;
             }
             
+            // Check if it's a new chat
             const newChatId = profile.chat.chat_id;
             const isNewChat = newChatId !== currentChatId;
             const now = Date.now();
             
             if (isNewChat) {
+                // Reset state for new chat - CRITICAL: increment request ID to invalidate old requests
                 currentRequestId++;
                 currentChatId = newChatId;
                 currentProfile = profile;
-                currentChatData = null;
+                currentChatData = null;  // Clear old chat data!
                 currentTranscript = '';
                 lastMessageCount = 0;
                 lastResponse = null;
@@ -607,6 +607,7 @@
             const requestIdAtStart = currentRequestId;
             
             try {
+                // Fetch the full chat from our backend
                 const chatResponse = await fetch(API_BASE + '/api/livechat/chat/' + currentChatId);
                 
                 if (!chatResponse.ok) {
@@ -616,23 +617,28 @@
                 
                 const chatData = await chatResponse.json();
                 
+                // CRITICAL: Check if chat changed while we were fetching
                 if (chatIdAtStart !== currentChatId || requestIdAtStart !== currentRequestId) {
                     console.log('[Copilot] Chat changed during fetch, discarding');
                     return;
                 }
                 
-                currentChatData = chatData;
+                currentChatData = chatData; // Store for AI context
                 
+                // Build transcript from messages
                 const thread = chatData.thread || chatData;
                 const events = thread.events || [];
                 const messages = events.filter(e => e.type === 'message');
                 
+                // Check if there are new messages
                 if (messages.length === lastMessageCount && lastResponse) {
+                    // No new messages, don't refresh
                     return;
                 }
                 
                 lastMessageCount = messages.length;
                 
+                // Build transcript with timestamps
                 let transcript = '';
                 let lastCustomerMessage = '';
                 
@@ -668,6 +674,7 @@
             const requestIdAtStart = currentRequestId;
             
             try {
+                // Fetch chat to check message count
                 const chatResponse = await fetch(API_BASE + '/api/livechat/chat/' + currentChatId);
                 
                 if (!chatResponse.ok) {
@@ -677,21 +684,24 @@
                 
                 const chatData = await chatResponse.json();
                 
+                // CRITICAL: Check if chat changed while we were polling
                 if (chatIdAtStart !== currentChatId || requestIdAtStart !== currentRequestId) {
                     console.log('[Copilot] Chat changed during poll, discarding');
                     return;
                 }
                 
-                currentChatData = chatData;
+                currentChatData = chatData; // Always keep chat data fresh
                 
                 const thread = chatData.thread || chatData;
                 const events = thread.events || [];
                 const messages = events.filter(e => e.type === 'message');
                 
+                // Only re-analyze if message count changed
                 if (messages.length !== lastMessageCount) {
                     console.log('[Copilot] New message detected!', messages.length, 'vs', lastMessageCount);
                     lastMessageCount = messages.length;
                     
+                    // Rebuild transcript
                     let transcript = '';
                     let lastCustomerMessage = '';
                     
@@ -723,10 +733,12 @@
         }
         
         async function getSuggestions(lastMessage) {
+            // Capture current state at request time
             const requestId = currentRequestId;
             const chatIdAtRequest = currentChatId;
             
             try {
+                // Build comprehensive request with full chat data
                 const requestBody = {
                     chat_id: currentChatId,
                     message_text: lastMessage || '',
@@ -734,6 +746,7 @@
                     transcript_so_far: currentTranscript,
                     customer_email: currentProfile?.email || null,
                     customer_name: currentProfile?.name || 'Visitor',
+                    // CRITICAL: Include full chat data for context
                     chat_data: currentChatData
                 };
                 
@@ -744,7 +757,8 @@
                     has_chat_data: !!currentChatData
                 });
                 
-                // STAGE 1: Get A4 context immediately (fast)
+                // STAGE 1: Get quick customer context immediately (fast)
+                // IMPORTANT: Include chat_data so we can extract email from pre-chat form
                 const contextPromise = fetch(API_BASE + '/api/copilot/context', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -753,7 +767,7 @@
                         customer_name: requestBody.customer_name,
                         customer_company: currentProfile?.fields?.company || null,
                         transcript: currentTranscript,
-                        chat_data: currentChatData
+                        chat_data: currentChatData  // Needed to extract email from pre-chat form
                     })
                 });
                 
@@ -764,13 +778,15 @@
                     body: JSON.stringify(requestBody)
                 });
                 
-                // Show A4 context as soon as it's ready
+                // Show quick context as soon as it's ready
                 try {
                     const contextResponse = await contextPromise;
                     if (contextResponse.ok) {
                         const contextData = await contextResponse.json();
                         
+                        // Check for stale response
                         if (requestId === currentRequestId && chatIdAtRequest === currentChatId) {
+                            // Normalize API response (supports both legacy and new shapes)
                             const ctx = contextData && (contextData.customer_context || contextData.context || contextData);
                             renderPartialUI(ctx, lastMessage);
                         }
@@ -786,6 +802,7 @@
                 
                 const raw = await response.json();
                 
+                // Map API response into the widget's expected shape
                 const result = {
                     suggestions: {
                         primary_response: raw.suggestions?.primary_response 
@@ -809,6 +826,30 @@
                         agent_product_links: raw.suggestions?.agent_product_links
                             || raw.suggestion?.agent_product_links
                             || [],
+                        confidence: raw.suggestions?.confidence
+                            || raw.suggestion?.confidence
+                            || null,
+                        send_ready: raw.suggestions?.send_ready
+                            || raw.suggestion?.send_ready
+                            || false,
+                        facts_used: raw.suggestions?.facts_used
+                            || raw.suggestion?.facts_used
+                            || [],
+                        checks: raw.suggestions?.checks
+                            || raw.suggestion?.checks
+                            || {},
+                        similar_examples: raw.suggestions?.similar_examples
+                            || raw.suggestion?.similar_examples
+                            || [],
+                        prefetched_product_page: raw.suggestions?.prefetched_product_page
+                            || raw.suggestion?.prefetched_product_page
+                            || null,
+                        email_required: raw.suggestions?.email_required
+                            || raw.suggestion?.email_required
+                            || false,
+                        company_analysis: raw.suggestions?.company_analysis
+                            || raw.suggestion?.company_analysis
+                            || null,
                     },
                     customer_context: raw.customer_context 
                         || raw.context 
@@ -817,12 +858,14 @@
                     suggestion_id: raw.suggestion_id || raw.suggestion?.suggestion_id || null,
                 };
                 
+                // CRITICAL: Discard stale responses from old chats
                 if (requestId !== currentRequestId || chatIdAtRequest !== currentChatId) {
                     console.log('[Copilot] Discarding stale response for chat:', chatIdAtRequest, 
                                 '(current:', currentChatId, ')');
                     return;
                 }
                 
+                // Check if response actually changed
                 const newText = result.suggestions?.primary_response || '';
                 const oldText = lastResponse?.suggestions?.primary_response || '';
                 const isUpdate = lastResponse && newText !== oldText;
@@ -833,6 +876,7 @@
             } catch (error) {
                 console.error('[Copilot] Error getting suggestions:', error);
                 if (!lastResponse) {
+                    // Check if it's a connection error (backend offline)
                     if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.name === 'TypeError') {
                         showOffline();
                     } else {
@@ -843,11 +887,13 @@
         }
         
         function renderPartialUI(contextData, lastMessage) {
+            // Render quick context immediately with a "generating" placeholder for AI
             const ctx = contextData || {};
             const app = document.getElementById('app');
             
             let html = '';
             
+            // Show "Generating..." for the response
             html += '<div class="response-hero">';
             html += '<div class="response-label">✨ GENERATING RESPONSE...</div>';
             html += '<div class="response-text" style="color: var(--text-dim); font-style: italic;">';
@@ -860,99 +906,37 @@
             html += '<div style="padding: 12px 16px;"><div class="loading-spinner"></div></div>';
             html += '</div>';
             
-            if (ctx.error) {
-                html += '<div class="context-section open">';
-                html += '<div class="context-header">';
-                html += '<div class="context-title">📊 A4 Account <span class="context-badge new" style="background: rgba(244, 67, 54, 0.2); color: #f44336;">A4 ERROR</span></div>';
-                html += '</div>';
-                html += '<div class="context-body">';
-                html += '<div style="font-size: 12px; color: #f44336;">' + escapeHtml(String(ctx.error).slice(0, 180)) + '</div>';
-                html += '<div style="font-size: 11px; color: var(--text-dim); margin-top: 6px;">→ A4 is at its connection limit. Retry in a moment.</div>';
-                html += '</div></div>';
-            } else if (ctx.matched && ctx.client) {
+            // Show basic customer info immediately (no A4 lookup)
+            if (ctx.client) {
                 html += '<div class="context-section open">';
                 html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
-                html += '<div class="context-title">📊 A4 Account <span class="context-badge match">FOUND</span></div>';
+                html += '<div class="context-title">👤 Customer</div>';
                 html += '<span class="context-arrow">▼</span>';
                 html += '</div>';
                 html += '<div class="context-body">';
-                html += '<div class="context-row"><span class="label">Client</span><span class="value">' + escapeHtml(ctx.client.name || '-') + '</span></div>';
-                if (ctx.account_summary) {
-                    html += '<div class="context-row"><span class="label">Lifetime</span><span class="value" style="color: var(--accent);">$' + (ctx.account_summary.lifetime_revenue || 0).toLocaleString() + '</span></div>';
+                if (ctx.client.name) {
+                    html += '<div class="context-row"><span class="label">Name</span><span class="value">' + escapeHtml(ctx.client.name) + '</span></div>';
                 }
-                html += '</div></div>';
-                
-                // Open Quotes (Active, within 1 year)
-                if (ctx.open_quotes && ctx.open_quotes.length > 0) {
-                    html += '<div class="context-section">';
-                    html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
-                    html += '<div class="context-title">📝 Open Quotes (' + ctx.open_quotes.length + ')</div>';
-                    html += '<span class="context-arrow">▼</span>';
-                    html += '</div>';
-                    html += '<div class="context-body">';
-                    ctx.open_quotes.slice(0, 5).forEach(function(q) {
-                        html += '<div style="padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:6px;border-left:3px solid var(--accent);">';
-                        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-                        html += '<span style="font-weight:600;color:var(--text);">#' + escapeHtml(q.refnum) + '</span>';
-                        html += '<span style="font-weight:700;color:var(--accent);">$' + (q.total || 0).toLocaleString() + '</span>';
-                        html += '</div>';
-                        var details = [];
-                        if (q.date) details.push(q.date.split('T')[0]);
-                        if (q.their_po) details.push('PO: ' + q.their_po);
-                        if (details.length > 0) {
-                            html += '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">' + escapeHtml(details.join(' • ')) + '</div>';
-                        }
-                        if (q.followup) {
-                            html += '<div style="font-size:10px;color:#f0ad4e;margin-top:2px;">📅 F/U: ' + q.followup.split('T')[0] + '</div>';
-                        }
-                        html += '</div>';
-                    });
-                    html += '</div></div>';
+                if (ctx.client.company) {
+                    html += '<div class="context-row"><span class="label">Company</span><span class="value">' + escapeHtml(ctx.client.company) + '</span></div>';
                 }
-                
-                // Recent Orders (within 90 days)
-                if (ctx.recent_orders && ctx.recent_orders.length > 0) {
-                    html += '<div class="context-section">';
-                    html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
-                    html += '<div class="context-title">📦 Recent Orders (' + ctx.recent_orders.length + ')</div>';
-                    html += '<span class="context-arrow">▼</span>';
-                    html += '</div>';
-                    html += '<div class="context-body">';
-                    ctx.recent_orders.slice(0, 5).forEach(function(o) {
-                        var releasedColor = o.released ? '#4CAF50' : '#888';
-                        var releasedIcon = o.released ? '✓' : '○';
-                        html += '<div style="padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:6px;border-left:3px solid ' + releasedColor + ';">';
-                        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-                        html += '<span style="font-weight:600;color:var(--text);">#' + escapeHtml(o.refnum) + '</span>';
-                        html += '<span style="font-weight:700;color:var(--accent);">$' + (o.total || 0).toLocaleString() + '</span>';
-                        html += '</div>';
-                        var details = [];
-                        if (o.date) details.push('Entered: ' + o.date.split('T')[0]);
-                        if (o.their_po) details.push('PO: ' + o.their_po);
-                        if (details.length > 0) {
-                            html += '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">' + escapeHtml(details.join(' • ')) + '</div>';
-                        }
-                        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:3px;">';
-                        if (o.released) {
-                            var relDate = o.released_date ? ' ' + o.released_date.split('T')[0] : '';
-                            html += '<span style="font-size:10px;color:#4CAF50;">' + releasedIcon + ' Released' + relDate + '</span>';
-                        } else {
-                            html += '<span style="font-size:10px;color:#f0ad4e;">' + releasedIcon + ' Pending Release</span>';
-                        }
-                        if (o.est_ship && o.est_ship !== 'None') {
-                            html += '<span style="font-size:10px;color:#42a5f5;">🚚 ESD: ' + o.est_ship.split('T')[0] + '</span>';
-                        }
-                        html += '</div>';
-                        html += '</div>';
-                    });
-                    html += '</div></div>';
+                if (ctx.client.email) {
+                    html += '<div class="context-row"><span class="label">Email</span><span class="value">' + escapeHtml(ctx.client.email) + '</span></div>';
                 }
-            } else {
-                html += '<div class="context-section">';
-                html += '<div class="context-header">';
-                html += '<div class="context-title">📊 A4 Account <span class="context-badge" style="background: var(--text-dim);">SEARCHING...</span></div>';
                 html += '</div></div>';
             }
+
+            // What we're checking (loading state)
+            html += '<div class="context-section open">';
+            html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+            html += '<div class="context-title">🔎 What Copilot is checking <span class="context-badge product">IN PROGRESS</span></div>';
+            html += '<span class="context-arrow">▼</span>';
+            html += '</div>';
+            html += '<div class="context-body">';
+            html += '<div style="font-size: 12px; color: var(--text); margin-bottom: 6px; padding: 6px; background: var(--bg); border-radius: 4px;">• Similar chat examples (vector search)</div>';
+            html += '<div style="font-size: 12px; color: var(--text); margin-bottom: 6px; padding: 6px; background: var(--bg); border-radius: 4px;">• Customer journey URLs (current/referrer/viewed)</div>';
+            html += '<div style="font-size: 12px; color: var(--text); margin-bottom: 6px; padding: 6px; background: var(--bg); border-radius: 4px;">• Terra product page scrape (if needed for specs/pricing)</div>';
+            html += '</div></div>';
             
             app.innerHTML = html;
         }
@@ -965,11 +949,13 @@
             
             let html = '';
             
+            // Minimal status bar
             html += '<div class="status-bar">';
             html += '<span><span class="status-dot live"></span>' + lastMessageCount + ' messages • v' + COPILOT_WIDGET_VERSION + '</span>';
             html += '<span>' + escapeHtml(currentProfile?.name || 'Visitor') + '</span>';
             html += '</div>';
             
+            // Response
             if (sug.primary_response) {
                 html += '<div class="response-hero' + (isUpdate ? ' updated' : '') + '">';
                 html += '<div class="response-label">✨ SUGGESTED RESPONSE</div>';
@@ -977,6 +963,7 @@
                 html += '<button class="use-btn" onclick="useResponse(this, \'' + escapeJs(sug.primary_response) + '\')">';
                 html += '📋 USE THIS RESPONSE</button>';
                 
+                // Feedback buttons
                 html += '<div class="feedback-buttons">';
                 html += '<button class="feedback-btn thumbs-up" onclick="sendFeedback(\'thumbs_up\')" title="This was helpful">👍</button>';
                 html += '<button class="feedback-btn thumbs-down" onclick="sendFeedback(\'thumbs_down\')" title="Not helpful">👎</button>';
@@ -985,9 +972,11 @@
                 
                 html += '</div>';
                 
+                // Store suggestion_id for feedback
                 currentSuggestionId = result.suggestion_id || null;
             }
             
+            // Action recommendation
             if (sug.recommended_actions && sug.recommended_actions.length > 0) {
                 const action = sug.recommended_actions[0];
                 if (action && action.tool && action.tool !== 'no_action') {
@@ -998,6 +987,7 @@
                 }
             }
             
+            // Alternatives
             if (sug.alternatives && sug.alternatives.length > 0) {
                 html += '<div class="alternatives">';
                 html += '<div class="alt-label">Or try:</div>';
@@ -1007,117 +997,104 @@
                 html += '</div>';
             }
             
-            if (ctx.matched && ctx.client) {
-                html += '<div class="context-section open">';
-                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
-                html += '<div class="context-title">📊 A4 Account <span class="context-badge match">FOUND</span></div>';
-                html += '<span class="context-arrow">▼</span>';
-                html += '</div>';
-                html += '<div class="context-body">';
-                html += '<div class="context-row"><span class="label">Client</span><span class="value">' + escapeHtml(ctx.client.name || '-') + '</span></div>';
-                if (ctx.account_summary) {
-                    html += '<div class="context-row"><span class="label">Lifetime</span><span class="value" style="color: var(--accent);">$' + (ctx.account_summary.lifetime_revenue || 0).toLocaleString() + '</span></div>';
-                    if (ctx.account_summary.star_rating) {
-                        html += '<div class="context-row"><span class="label">Rating</span><span class="value">' + '⭐'.repeat(ctx.account_summary.star_rating) + '</span></div>';
-                    }
-                }
-                html += '</div></div>';
-                
-                // Open Quotes (Active, within 1 year)
-                if (ctx.open_quotes && ctx.open_quotes.length > 0) {
-                    html += '<div class="context-section">';
-                    html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
-                    html += '<div class="context-title">📝 Open Quotes (' + ctx.open_quotes.length + ')</div>';
-                    html += '<span class="context-arrow">▼</span>';
-                    html += '</div>';
-                    html += '<div class="context-body">';
-                    ctx.open_quotes.slice(0, 5).forEach(function(q) {
-                        html += '<div style="padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:6px;border-left:3px solid var(--accent);">';
-                        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-                        html += '<span style="font-weight:600;color:var(--text);">#' + escapeHtml(q.refnum) + '</span>';
-                        html += '<span style="font-weight:700;color:var(--accent);">$' + (q.total || 0).toLocaleString() + '</span>';
-                        html += '</div>';
-                        var details = [];
-                        if (q.date) details.push(q.date.split('T')[0]);
-                        if (q.their_po) details.push('PO: ' + q.their_po);
-                        if (details.length > 0) {
-                            html += '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">' + escapeHtml(details.join(' • ')) + '</div>';
-                        }
-                        if (q.followup) {
-                            html += '<div style="font-size:10px;color:#f0ad4e;margin-top:2px;">📅 F/U: ' + q.followup.split('T')[0] + '</div>';
-                        }
-                        html += '</div>';
-                    });
-                    html += '</div></div>';
-                }
-                
-                // Recent Orders (within 90 days)
-                if (ctx.recent_orders && ctx.recent_orders.length > 0) {
-                    html += '<div class="context-section">';
-                    html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
-                    html += '<div class="context-title">📦 Recent Orders (' + ctx.recent_orders.length + ')</div>';
-                    html += '<span class="context-arrow">▼</span>';
-                    html += '</div>';
-                    html += '<div class="context-body">';
-                    ctx.recent_orders.slice(0, 5).forEach(function(o) {
-                        var releasedColor = o.released ? '#4CAF50' : '#888';
-                        var releasedIcon = o.released ? '✓' : '○';
-                        html += '<div style="padding:6px 8px;background:var(--bg);border-radius:6px;margin-bottom:6px;border-left:3px solid ' + releasedColor + ';">';
-                        html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-                        html += '<span style="font-weight:600;color:var(--text);">#' + escapeHtml(o.refnum) + '</span>';
-                        html += '<span style="font-weight:700;color:var(--accent);">$' + (o.total || 0).toLocaleString() + '</span>';
-                        html += '</div>';
-                        var details = [];
-                        if (o.date) details.push('Entered: ' + o.date.split('T')[0]);
-                        if (o.their_po) details.push('PO: ' + o.their_po);
-                        if (details.length > 0) {
-                            html += '<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">' + escapeHtml(details.join(' • ')) + '</div>';
-                        }
-                        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:3px;">';
-                        if (o.released) {
-                            var relDate = o.released_date ? ' ' + o.released_date.split('T')[0] : '';
-                            html += '<span style="font-size:10px;color:#4CAF50;">' + releasedIcon + ' Released' + relDate + '</span>';
-                        } else {
-                            html += '<span style="font-size:10px;color:#f0ad4e;">' + releasedIcon + ' Pending Release</span>';
-                        }
-                        if (o.est_ship && o.est_ship !== 'None') {
-                            html += '<span style="font-size:10px;color:#42a5f5;">🚚 ESD: ' + o.est_ship.split('T')[0] + '</span>';
-                        }
-                        html += '</div>';
-                        html += '</div>';
-                    });
-                    html += '</div></div>';
-                }
-            } else {
-                html += '<div class="context-section open">';
-                html += '<div class="context-header">';
-                html += '<div class="context-title">📊 A4 Account <span class="context-badge new">NEW CUSTOMER</span></div>';
-                html += '</div>';
-                html += '<div class="context-body">';
-                html += '<div style="font-size: 12px; color: var(--text-dim);">No account history in A4</div>';
-                html += '<div style="font-size: 11px; color: var(--warning); margin-top: 6px;">→ Collect company info for follow-up</div>';
-                html += '</div></div>';
+            // COPILOT TRACE / WHAT WAS CHECKED
+            const checks = sug.checks || {};
+            const vec = checks.vector_search || {};
+            const urls = checks.customer_urls || [];
+            const prefetch = checks.prefetch_product_page || {};
+            const similar = sug.similar_examples || [];
+            const facts = sug.facts_used || [];
+
+            html += '<div class="context-section open">';
+            html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+            html += '<div class="context-title">🔎 What Copilot Checked</div>';
+            html += '<span class="context-arrow">▼</span>';
+            html += '</div>';
+            html += '<div class="context-body">';
+
+            // Send-ready + confidence
+            const confPct = (typeof sug.confidence === "number") ? Math.round(sug.confidence * 100) : null;
+            const sendReady = !!sug.send_ready;
+            html += '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">';
+            html += '<span class="context-badge product" style="padding:4px 8px;">' + (sendReady ? 'SEND READY' : 'REVIEW') + '</span>';
+            if (confPct !== null) {
+                html += '<span class="context-badge" style="background: rgba(66, 165, 245, 0.2); color: var(--info); padding:4px 8px;">' + confPct + '% confidence</span>';
             }
-            
-            if (ctx.mentioned_refs && ctx.mentioned_refs.length > 0) {
-                html += '<div class="context-section open">';
-                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
-                html += '<div class="context-title">🔍 Referenced in Chat</div>';
-                html += '<span class="context-arrow">▼</span>';
+            html += '</div>';
+
+            // Vector search
+            const topSim = (typeof vec.top_similarity === "number") ? Math.round(vec.top_similarity * 100) : null;
+            html += '<div class="context-row"><span class="label">Similar chats</span><span class="value">' +
+                (vec.examples_found ? (vec.examples_found + ' found' + (topSim !== null ? ' • top ' + topSim + '%' : '')) : 'No matches') +
+                '</span></div>';
+
+            // URLs
+            html += '<div class="context-row"><span class="label">Customer URLs</span><span class="value">' + (urls.length ? (urls.length + ' captured') : 'None captured') + '</span></div>';
+            if (urls.length) {
+                html += '<div style="font-size: 11px; color: var(--text-dim); margin-top: 6px; padding: 6px; background: var(--bg); border-radius: 6px;">';
+                urls.slice(0, 3).forEach(function(u) {
+                    const short = (u || '').replace(/^https?:\/\//, '').split('?')[0];
+                    html += '• ' + escapeHtml(short.slice(0, 70)) + '<br>';
+                });
                 html += '</div>';
-                html += '<div class="context-body">';
-                ctx.mentioned_refs.forEach(function(ref) {
-                    html += '<div class="context-row">';
-                    html += '<span class="label">#' + escapeHtml(ref.refnum) + ' (' + escapeHtml(ref.type || 'Quote') + ')</span>';
-                    html += '<span class="value">$' + (ref.total || 0).toLocaleString() + '</span>';
+            }
+
+            // Prefetch product page scrape
+            if (prefetch && (prefetch.attempted || prefetch.success)) {
+                const status = prefetch.success ? '✓ scraped' : (prefetch.attempted ? 'attempted' : 'not attempted');
+                html += '<div class="context-row"><span class="label">Product page scrape</span><span class="value">' + escapeHtml(status) + '</span></div>';
+            }
+
+            // Evidence from prefetched product scrape
+            if (sug.prefetched_product_page && !sug.prefetched_product_page.error) {
+                const p = sug.prefetched_product_page;
+                html += '<div style="margin-top:10px;padding:8px;background:var(--bg);border-radius:8px;border-left:3px solid var(--accent);">';
+                html += '<div style="font-weight:700;color:var(--text);margin-bottom:4px;">🛒 Product evidence</div>';
+                if (p.product_name) html += '<div style="font-size:12px;color:var(--text);">' + escapeHtml(p.product_name) + '</div>';
+                if (p.part_number) html += '<div style="font-size:12px;color:var(--text-dim);">Part #: <strong style="color:var(--text);">' + escapeHtml(p.part_number) + '</strong></div>';
+                if (p.price) html += '<div style="font-size:12px;color:var(--accent);font-weight:700;">Price: ' + escapeHtml(p.price) + '</div>';
+                html += '</div>';
+            }
+
+            // Facts used (short list the model claims it relied on)
+            if (facts && facts.length) {
+                html += '<div style="margin-top:10px;">';
+                html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">Facts used</div>';
+                facts.slice(0, 6).forEach(function(f) {
+                    html += '<div style="font-size: 12px; color: var(--text); margin-bottom: 6px; padding: 6px; background: var(--bg); border-radius: 4px;">• ' + escapeHtml(f) + '</div>';
+                });
+                html += '</div>';
+            }
+
+            html += '</div></div>';
+
+            // Similar examples (glimpse)
+            if (similar && similar.length) {
+                html += '<div class="context-section">';
+                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                html += '<div class="context-title">📚 Similar Examples (' + similar.length + ')</div>';
+                html += '<span class="context-arrow">▶</span>';
+                html += '</div>';
+                html += '<div class="context-body" style="display: none;">';
+                similar.slice(0, 2).forEach(function(ex) {
+                    const simPct = (typeof ex.similarity === "number") ? Math.round(ex.similarity * 100) : 0;
+                    html += '<div style="padding:8px;background:var(--bg);border-radius:8px;margin-bottom:8px;border-left:3px solid var(--info);">';
+                    html += '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">';
+                    html += '<span style="font-weight:700;color:var(--text);">' + simPct + '% match</span>';
+                    if (ex.search_method) html += '<span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;">' + escapeHtml(ex.search_method) + '</span>';
                     html += '</div>';
-                    if (ref.client) {
-                        html += '<div style="font-size: 10px; color: var(--text-dim); margin-bottom: 4px;">For: ' + escapeHtml(ref.client) + '</div>';
+                    if (ex.customer_preview) {
+                        html += '<div style="font-size:11px;color:var(--text-dim);margin-top:6px;">Customer: ' + escapeHtml(ex.customer_preview) + '</div>';
                     }
+                    if (ex.agent_preview) {
+                        html += '<div style="font-size:11px;color:var(--text-dim);margin-top:6px;">Agent: ' + escapeHtml(ex.agent_preview) + '</div>';
+                    }
+                    html += '</div>';
                 });
                 html += '</div></div>';
             }
             
+            // Tool Calls - show what the AI looked up dynamically
             if (sug.tool_calls && sug.tool_calls.length > 0) {
                 html += '<div class="context-section">';
                 html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
@@ -1126,8 +1103,10 @@
                 html += '</div>';
                 html += '<div class="context-body" style="display: none;">';
                 sug.tool_calls.forEach(function(tc) {
-                    var status = tc.result && tc.result.found ? '✓' : tc.result && tc.result.error ? '✗' : '•';
-                    var statusColor = tc.result && tc.result.found ? '#4CAF50' : tc.result && tc.result.error ? '#f44336' : 'inherit';
+                    var isDeduped = !!tc.deduped;
+                    var hasError = tc.result && tc.result.error;
+                    var status = isDeduped ? '↺' : (hasError ? '✗' : '✓');
+                    var statusColor = isDeduped ? 'var(--text-dim)' : (hasError ? '#f44336' : '#4CAF50');
                     html += '<div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px; padding: 4px; background: var(--bg); border-radius: 4px;">';
                     html += '<span style="color: ' + statusColor + ';">' + status + '</span> ';
                     html += '<strong>' + escapeHtml(tc.tool) + '</strong>';
@@ -1137,20 +1116,6 @@
                     }
                     if (tc.result && tc.result.error) {
                         html += '<div style="margin-top:4px;color:#f44336;opacity:0.9;">' + escapeHtml(String(tc.result.error).slice(0, 180)) + '</div>';
-                    }
-                    if (tc.tool === 'search_product' && tc.result && tc.result.found) {
-                        var pn = tc.result.part_number || '';
-                        var name = tc.result.product_name || '';
-                        var qa = tc.result.qty_available;
-                        var bo = tc.result.qty_backorder;
-                        var po = tc.result.qty_on_po;
-                        var lt = tc.result.lead_time_estimate_days;
-                        var ltn = tc.result.lead_time_sample_size;
-                        html += '<div style="margin-top:4px;color:var(--text);">#' + escapeHtml(String(pn)) + ' • ' + escapeHtml(String(name).slice(0, 60)) + '</div>';
-                        html += '<div style="margin-top:2px;color:var(--text-dim);">Qty avail: ' + escapeHtml(String(qa)) + ' • BO: ' + escapeHtml(String(bo)) + ' • On PO: ' + escapeHtml(String(po)) + '</div>';
-                        if (lt !== null && lt !== undefined) {
-                            html += '<div style="margin-top:2px;color:var(--text-dim);">Est lead time: ' + escapeHtml(String(lt)) + ' days (n=' + escapeHtml(String(ltn || 0)) + ')</div>';
-                        }
                     }
                     html += '</div>';
                 });
@@ -1183,6 +1148,7 @@
                 html += '</div></div>';
             }
             
+            // Agent Notes - actionable insights
             if (sug.context_notes && sug.context_notes.length > 0) {
                 html += '<div class="context-section open">';
                 html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
@@ -1211,8 +1177,9 @@
         }
         
         async function useResponse(btn, text) {
+            // Log as "used" feedback
             if (currentSuggestionId) {
-                await sendFeedback('used', false);
+                await sendFeedback('used', false);  // false = don't show toast
             }
             
             if (widget) {
@@ -1252,6 +1219,7 @@
                 });
                 
                 if (response.ok) {
+                    // Visual feedback
                     const buttons = document.querySelectorAll('.feedback-btn');
                     buttons.forEach(btn => btn.classList.remove('active'));
                     
@@ -1265,7 +1233,7 @@
                             'thumbs_up': 'Thanks for the feedback! 👍',
                             'thumbs_down': 'Thanks for the feedback! 👎',
                             'edited': 'Thanks for the feedback! ✏️',
-                            'used': ''
+                            'used': ''  // Silent for auto-logging
                         };
                         if (messages[feedbackType]) {
                             showToast(messages[feedbackType]);
@@ -1414,14 +1382,10 @@
                     }
                     
                     html += '<div style="padding: 12px 16px; font-size: 12px; color: var(--text-dim);">';
-                    if (ctx.matched && ctx.client) {
-                        html += '✓ A4: ' + escapeHtml(ctx.client.name);
-                        if (ctx.account_summary && ctx.account_summary.lifetime_revenue) {
-                            html += ' • $' + (ctx.account_summary.lifetime_revenue || 0).toLocaleString() + ' lifetime';
-                        }
-                    } else {
-                        html += 'ℹ New customer (no A4 record)';
-                    }
+                    const checks = sug.checks || {};
+                    const vec = checks.vector_search || {};
+                    const topSim = (typeof vec.top_similarity === "number") ? Math.round(vec.top_similarity * 100) : null;
+                    html += '✓ Copilot checks: ' + (vec.examples_found ? (vec.examples_found + ' examples' + (topSim !== null ? ' • top ' + topSim + '%' : '')) : 'no vector matches');
                     html += '</div>';
                 } else {
                     html = '<div class="error-box">No suggestion generated.</div>';
@@ -1451,4 +1415,3 @@
     </script>
 </body>
 </html>
-
