@@ -177,6 +177,53 @@
             color: var(--text);
             border-color: var(--accent);
         }
+
+        /* Response variations */
+        .var-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 10px 0 10px;
+        }
+
+        .var-tab {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--bg);
+            color: var(--text-dim);
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .var-tab:hover { border-color: var(--accent); color: var(--text); }
+        .var-tab.active {
+            background: rgba(169, 121, 255, 0.18);
+            border-color: var(--accent);
+            color: var(--text);
+        }
+
+        .var-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .copy-btn {
+            flex: 1;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--card);
+            color: var(--text);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .copy-btn:hover { border-color: var(--accent); }
         
         /* Context sections */
         .context-section {
@@ -384,6 +431,8 @@
         let lastMessageCount = 0;
         let lastResponse = null;
         let currentSuggestionId = null;  // Track current suggestion for feedback
+        let currentVariations = [];
+        let currentVariationIndex = 0;
         let pollInterval = null;
         let isRefreshing = false;
         let currentRequestId = 0;  // Track request ID to discard stale responses
@@ -811,6 +860,9 @@
                         alternatives: raw.suggestions?.alternatives 
                             || raw.suggestion?.alternatives 
                             || [],
+                        variations: raw.suggestions?.variations
+                            || raw.suggestion?.variations
+                            || [],
                         detected_intent: raw.suggestions?.detected_intent 
                             || raw.suggestion?.intent 
                             || null,
@@ -957,11 +1009,59 @@
             
             // Response
             if (sug.primary_response) {
+                // Build variations list (Recommended + labeled variations)
+                const vars = [];
+                vars.push({ label: 'recommended', response: sug.primary_response });
+
+                if (Array.isArray(sug.variations) && sug.variations.length) {
+                    sug.variations.forEach(function(v) {
+                        if (!v) return;
+                        const label = (v.label || '').toString().trim();
+                        const resp = (v.response || '').toString().trim();
+                        if (!resp) return;
+                        vars.push({ label: label, response: resp });
+                    });
+                } else if (Array.isArray(sug.alternatives) && sug.alternatives.length) {
+                    sug.alternatives.forEach(function(alt, idx) {
+                        const resp = (alt || '').toString().trim();
+                        if (!resp) return;
+                        vars.push({ label: 'alt_' + (idx + 1), response: resp });
+                    });
+                }
+
+                currentVariations = vars;
+                currentVariationIndex = 0;
+
                 html += '<div class="response-hero' + (isUpdate ? ' updated' : '') + '">';
                 html += '<div class="response-label">✨ SUGGESTED RESPONSE</div>';
-                html += '<div class="response-text">' + escapeHtml(sug.primary_response) + '</div>';
-                html += '<button class="use-btn" onclick="useResponse(this, \'' + escapeJs(sug.primary_response) + '\')">';
-                html += '📋 USE THIS RESPONSE</button>';
+
+                // Tabs
+                if (currentVariations.length > 1) {
+                    html += '<div class="var-tabs">';
+                    currentVariations.slice(0, 4).forEach(function(v, idx) {
+                        const rawLabel = (v.label || '').toString().trim().toLowerCase();
+                        let label = rawLabel;
+                        if (idx === 0) label = 'recommended';
+                        if (label === 'recommended') label = '★ Recommended';
+                        else if (label === 'concise') label = 'Concise';
+                        else if (label === 'detailed') label = 'Detailed';
+                        else if (label === 'friendly') label = 'Friendly';
+                        else label = 'Alternative';
+
+                        html += '<button class="var-tab' + (idx === 0 ? ' active' : '') + '" onclick="selectVariation(' + idx + ')">' + escapeHtml(label) + '</button>';
+                    });
+                    html += '</div>';
+                }
+
+                // Selected response text
+                const initialText = (currentVariations[0] && currentVariations[0].response) ? currentVariations[0].response : sug.primary_response;
+                html += '<div class="response-text" id="variation-text">' + escapeHtml(initialText) + '</div>';
+
+                // Actions
+                html += '<div class="var-actions">';
+                html += '<button class="use-btn" onclick="useSelectedResponse(this)">📋 USE THIS RESPONSE</button>';
+                html += '<button class="copy-btn" onclick="copySelectedResponse()">Copy</button>';
+                html += '</div>';
                 
                 // Feedback buttons
                 html += '<div class="feedback-buttons">';
@@ -987,22 +1087,11 @@
                 }
             }
             
-            // Alternatives
-            if (sug.alternatives && sug.alternatives.length > 0) {
-                html += '<div class="alternatives">';
-                html += '<div class="alt-label">Or try:</div>';
-                sug.alternatives.slice(0, 2).forEach(function(alt) {
-                    html += '<div class="alt-item" onclick="useResponse(null, \'' + escapeJs(alt) + '\')">' + escapeHtml(alt) + '</div>';
-                });
-                html += '</div>';
-            }
-            
             // COPILOT TRACE / WHAT WAS CHECKED
             const checks = sug.checks || {};
             const vec = checks.vector_search || {};
             const urls = checks.customer_urls || [];
             const prefetch = checks.prefetch_product_page || {};
-            const similar = sug.similar_examples || [];
             const facts = sug.facts_used || [];
 
             html += '<div class="context-section open">';
@@ -1068,32 +1157,6 @@
 
             html += '</div></div>';
 
-            // Similar examples (glimpse)
-            if (similar && similar.length) {
-                html += '<div class="context-section">';
-                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
-                html += '<div class="context-title">📚 Similar Examples (' + similar.length + ')</div>';
-                html += '<span class="context-arrow">▶</span>';
-                html += '</div>';
-                html += '<div class="context-body" style="display: none;">';
-                similar.slice(0, 2).forEach(function(ex) {
-                    const simPct = (typeof ex.similarity === "number") ? Math.round(ex.similarity * 100) : 0;
-                    html += '<div style="padding:8px;background:var(--bg);border-radius:8px;margin-bottom:8px;border-left:3px solid var(--info);">';
-                    html += '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">';
-                    html += '<span style="font-weight:700;color:var(--text);">' + simPct + '% match</span>';
-                    if (ex.search_method) html += '<span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;">' + escapeHtml(ex.search_method) + '</span>';
-                    html += '</div>';
-                    if (ex.customer_preview) {
-                        html += '<div style="font-size:11px;color:var(--text-dim);margin-top:6px;">Customer: ' + escapeHtml(ex.customer_preview) + '</div>';
-                    }
-                    if (ex.agent_preview) {
-                        html += '<div style="font-size:11px;color:var(--text-dim);margin-top:6px;">Agent: ' + escapeHtml(ex.agent_preview) + '</div>';
-                    }
-                    html += '</div>';
-                });
-                html += '</div></div>';
-            }
-            
             // Tool Calls - show what the AI looked up dynamically
             if (sug.tool_calls && sug.tool_calls.length > 0) {
                 html += '<div class="context-section">';
@@ -1174,6 +1237,41 @@
         
         function toggleSection(el) {
             el.classList.toggle('open');
+        }
+
+        function selectVariation(idx) {
+            try { idx = parseInt(idx, 10); } catch (e) { idx = 0; }
+            if (!Array.isArray(currentVariations) || currentVariations.length === 0) return;
+            if (idx < 0 || idx >= currentVariations.length) idx = 0;
+            currentVariationIndex = idx;
+
+            const el = document.getElementById('variation-text');
+            if (el) {
+                const text = (currentVariations[idx] && currentVariations[idx].response) ? currentVariations[idx].response : '';
+                el.textContent = text;
+            }
+
+            const tabs = document.querySelectorAll('.var-tab');
+            tabs.forEach(function(t, i) {
+                if (i === idx) t.classList.add('active');
+                else t.classList.remove('active');
+            });
+        }
+
+        async function useSelectedResponse(btn) {
+            if (!Array.isArray(currentVariations) || currentVariations.length === 0) return;
+            const v = currentVariations[currentVariationIndex] || currentVariations[0];
+            const text = (v && v.response) ? v.response : '';
+            if (!text) return;
+            await useResponse(btn, text);
+        }
+
+        function copySelectedResponse() {
+            if (!Array.isArray(currentVariations) || currentVariations.length === 0) return;
+            const v = currentVariations[currentVariationIndex] || currentVariations[0];
+            const text = (v && v.response) ? v.response : '';
+            if (!text) return;
+            copyToClipboard(text);
         }
         
         async function useResponse(btn, text) {
