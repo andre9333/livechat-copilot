@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,12 @@
     <script src="https://unpkg.com/@livechat/agent-app-sdk@1.6.3/dist/agentapp.umd.min.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         :root {
             --bg: #0f0f14;
             --card: #1a1a24;
@@ -20,7 +25,7 @@
             --warning: #ffa726;
             --info: #42a5f5;
         }
-        
+
         body {
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg);
@@ -29,7 +34,7 @@
             line-height: 1.5;
             min-height: 100vh;
         }
-        
+
         /* Status bar */
         .status-bar {
             padding: 6px 16px;
@@ -41,7 +46,7 @@
             font-size: 10px;
             color: var(--text-dim);
         }
-        
+
         .status-bar .status-dot {
             width: 6px;
             height: 6px;
@@ -49,31 +54,49 @@
             margin-right: 6px;
             display: inline-block;
         }
-        
-        .status-bar .status-dot.live { background: #4caf50; }
-        .status-bar .status-dot.loading { background: var(--warning); animation: pulse 1s infinite; }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
+
+        .status-bar .status-dot.live {
+            background: #4caf50;
         }
-        
+
+        .status-bar .status-dot.loading {
+            background: var(--warning);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.4;
+            }
+        }
+
         /* Main response section */
         .response-hero {
             background: linear-gradient(135deg, #1a2a35 0%, #1a1a24 100%);
             border-bottom: 1px solid var(--border);
             padding: 16px;
         }
-        
+
         .response-hero.updated {
             animation: highlight 0.5s ease;
         }
-        
+
         @keyframes highlight {
-            0% { background: linear-gradient(135deg, #1a4a35 0%, #1a1a24 100%); }
-            100% { background: linear-gradient(135deg, #1a2a35 0%, #1a1a24 100%); }
+            0% {
+                background: linear-gradient(135deg, #1a4a35 0%, #1a1a24 100%);
+            }
+
+            100% {
+                background: linear-gradient(135deg, #1a2a35 0%, #1a1a24 100%);
+            }
         }
-        
+
         .response-label {
             font-size: 10px;
             text-transform: uppercase;
@@ -81,7 +104,7 @@
             color: var(--accent);
             margin-bottom: 8px;
         }
-        
+
         .response-text {
             font-size: 14px;
             line-height: 1.6;
@@ -90,7 +113,7 @@
             max-height: 120px;
             overflow-y: auto;
         }
-        
+
         .use-btn {
             width: 100%;
             padding: 14px 20px;
@@ -103,63 +126,69 @@
             cursor: pointer;
             transition: all 0.15s;
         }
-        
-        .use-btn:hover { background: var(--accent-hover); }
-        .use-btn.copied { background: #2a4a3a; color: var(--accent); }
-        
-        /* Feedback buttons */
-        .feedback-buttons {
+
+        .use-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .use-btn.copied {
+            background: #2a4a3a;
+            color: var(--accent);
+        }
+
+        /* Response actions container */
+        .response-actions {
             display: flex;
             gap: 8px;
-            padding: 8px 16px;
-            background: var(--card);
-            border-top: 1px solid var(--border);
+            padding: 12px 16px;
         }
-        
-        .feedback-btn {
-            flex: 1;
-            padding: 8px 12px;
+
+        .regen-btn {
+            padding: 10px 16px;
             background: transparent;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            color: var(--text-dim);
-            font-size: 11px;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.15s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
         }
-        
-        .feedback-btn:hover {
-            background: var(--bg);
-            border-color: var(--accent);
-            color: var(--text);
+
+        .regen-btn:hover {
+            background: rgba(59, 225, 183, 0.1);
         }
-        
-        .feedback-btn.active {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: #000;
+
+        .feedback-btn.thumbs-up.active {
+            background: rgba(76, 175, 80, 0.2);
+            border-color: #4caf50;
+            color: #4caf50;
         }
-        
-        .feedback-btn.thumbs-up.active { background: rgba(76, 175, 80, 0.2); border-color: #4caf50; color: #4caf50; }
-        .feedback-btn.thumbs-down.active { background: rgba(244, 67, 54, 0.2); border-color: #f44336; color: #f44336; }
-        .feedback-btn.edited.active { background: rgba(255, 167, 38, 0.2); border-color: #ffa726; color: #ffa726; }
-        
+
+        .feedback-btn.thumbs-down.active {
+            background: rgba(244, 67, 54, 0.2);
+            border-color: #f44336;
+            color: #f44336;
+        }
+
+        .feedback-btn.edited.active {
+            background: rgba(255, 167, 38, 0.2);
+            border-color: #ffa726;
+            color: #ffa726;
+        }
+
         /* Alternatives */
         .alternatives {
             padding: 12px 16px;
             border-bottom: 1px solid var(--border);
         }
-        
+
         .alt-label {
             font-size: 10px;
             color: var(--text-dim);
             margin-bottom: 6px;
         }
-        
+
         .alt-item {
             padding: 8px 10px;
             background: var(--card);
@@ -171,65 +200,18 @@
             cursor: pointer;
             transition: all 0.15s;
         }
-        
+
         .alt-item:hover {
             background: #252535;
             color: var(--text);
             border-color: var(--accent);
         }
 
-        /* Response variations */
-        .var-tabs {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin: 10px 0 10px;
-        }
-
-        .var-tab {
-            padding: 6px 10px;
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            background: var(--bg);
-            color: var(--text-dim);
-            font-size: 11px;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-
-        .var-tab:hover { border-color: var(--accent); color: var(--text); }
-        .var-tab.active {
-            background: rgba(169, 121, 255, 0.18);
-            border-color: var(--accent);
-            color: var(--text);
-        }
-
-        .var-actions {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-top: 10px;
-        }
-
-        .copy-btn {
-            flex: 1;
-            padding: 10px 12px;
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            background: var(--card);
-            color: var(--text);
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .copy-btn:hover { border-color: var(--accent); }
-        
         /* Context sections */
         .context-section {
             border-bottom: 1px solid var(--border);
         }
-        
+
         .context-header {
             padding: 10px 16px;
             display: flex;
@@ -237,9 +219,11 @@
             justify-content: space-between;
             cursor: pointer;
         }
-        
-        .context-header:hover { background: var(--card); }
-        
+
+        .context-header:hover {
+            background: var(--card);
+        }
+
         .context-title {
             font-size: 11px;
             font-weight: 600;
@@ -248,38 +232,63 @@
             align-items: center;
             gap: 6px;
         }
-        
+
         .context-badge {
             padding: 2px 6px;
             border-radius: 4px;
             font-size: 9px;
             font-weight: 700;
         }
-        
-        .context-badge.match { background: rgba(0, 212, 170, 0.2); color: var(--accent); }
-        .context-badge.new { background: rgba(255, 167, 38, 0.2); color: var(--warning); }
-        .context-badge.product { background: rgba(66, 165, 245, 0.2); color: var(--info); }
-        
+
+        .context-badge.match {
+            background: rgba(0, 212, 170, 0.2);
+            color: var(--accent);
+        }
+
+        .context-badge.new {
+            background: rgba(255, 167, 38, 0.2);
+            color: var(--warning);
+        }
+
+        .context-badge.product {
+            background: rgba(66, 165, 245, 0.2);
+            color: var(--info);
+        }
+
         .context-arrow {
             font-size: 10px;
             color: var(--text-dim);
             transition: transform 0.2s;
         }
-        
-        .context-section.open .context-arrow { transform: rotate(180deg); }
-        .context-body { padding: 0 16px 12px; display: none; }
-        .context-section.open .context-body { display: block; }
-        
+
+        .context-section.open .context-arrow {
+            transform: rotate(180deg);
+        }
+
+        .context-body {
+            padding: 0 16px 12px;
+            display: none;
+        }
+
+        .context-section.open .context-body {
+            display: block;
+        }
+
         .context-row {
             display: flex;
             justify-content: space-between;
             padding: 4px 0;
             font-size: 12px;
         }
-        
-        .context-row .label { color: var(--text-dim); }
-        .context-row .value { font-weight: 500; }
-        
+
+        .context-row .label {
+            color: var(--text-dim);
+        }
+
+        .context-row .value {
+            font-weight: 500;
+        }
+
         /* Action bar */
         .action-bar {
             padding: 10px 16px;
@@ -291,13 +300,13 @@
             font-size: 12px;
             color: var(--warning);
         }
-        
+
         /* States */
         .state-container {
             padding: 40px 20px;
             text-align: center;
         }
-        
+
         .spinner {
             width: 24px;
             height: 24px;
@@ -307,9 +316,13 @@
             animation: spin 0.8s linear infinite;
             margin: 0 auto 12px;
         }
-        
-        @keyframes spin { to { transform: rotate(360deg); } }
-        
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
         .loading-spinner {
             width: 24px;
             height: 24px;
@@ -319,10 +332,17 @@
             animation: spin 0.8s linear infinite;
             margin: 0 auto;
         }
-        
-        .state-text { color: var(--text-dim); font-size: 13px; }
-        .state-icon { font-size: 28px; margin-bottom: 8px; }
-        
+
+        .state-text {
+            color: var(--text-dim);
+            font-size: 13px;
+        }
+
+        .state-icon {
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
         .error-box {
             padding: 12px 16px;
             background: rgba(255, 82, 82, 0.1);
@@ -332,9 +352,12 @@
             color: #ff5252;
             font-size: 12px;
         }
-        
+
         /* Test mode */
-        .test-mode { padding: 16px; }
+        .test-mode {
+            padding: 16px;
+        }
+
         .test-title {
             font-size: 11px;
             color: var(--text-dim);
@@ -342,16 +365,20 @@
             letter-spacing: 1px;
             margin-bottom: 12px;
         }
-        
-        .form-group { margin-bottom: 10px; }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
         .form-group label {
             font-size: 11px;
             color: var(--text-dim);
             display: block;
             margin-bottom: 4px;
         }
-        
-        .form-group input, .form-group textarea {
+
+        .form-group input,
+        .form-group textarea {
             width: 100%;
             padding: 10px;
             background: var(--card);
@@ -361,12 +388,13 @@
             font-size: 13px;
             font-family: inherit;
         }
-        
-        .form-group input:focus, .form-group textarea:focus {
+
+        .form-group input:focus,
+        .form-group textarea:focus {
             outline: none;
             border-color: var(--accent);
         }
-        
+
         .test-btn {
             width: 100%;
             padding: 12px;
@@ -378,9 +406,11 @@
             font-weight: 600;
             cursor: pointer;
         }
-        
-        .test-btn:hover { background: var(--accent-hover); }
-        
+
+        .test-btn:hover {
+            background: var(--accent-hover);
+        }
+
         /* Toast */
         .toast {
             position: fixed;
@@ -397,17 +427,27 @@
             transition: all 0.3s ease;
             z-index: 1000;
         }
-        
+
         .toast.show {
             transform: translateX(-50%) translateY(0);
             opacity: 1;
         }
-        
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 2px;
+        }
     </style>
 </head>
+
 <body>
     <div id="app">
         <div class="state-container">
@@ -415,14 +455,14 @@
             <div class="state-text">Connecting...</div>
         </div>
     </div>
-    
+
     <div id="toast" class="toast"></div>
 
     <script>
         const API_BASE = 'https://livechataiagent.ngrok.app';
         // Bump this to confirm the LiveChat sidebar is loading the latest widget HTML (cache bust sanity check)
         const COPILOT_WIDGET_VERSION = '2025-12-18.1';
-        
+
         let widget = null;
         let currentChatId = null;
         let currentProfile = null;
@@ -431,34 +471,32 @@
         let lastMessageCount = 0;
         let lastResponse = null;
         let currentSuggestionId = null;  // Track current suggestion for feedback
-        let currentVariations = [];
-        let currentVariationIndex = 0;
         let pollInterval = null;
         let isRefreshing = false;
         let currentRequestId = 0;  // Track request ID to discard stale responses
         let lastFetchTime = 0;  // Throttle fetches
-        
+
         // WebSocket connection for real-time updates
         let socket = null;
         let socketConnected = false;
         const FALLBACK_POLL_INTERVAL = 60000; // 60s fallback if WebSocket disconnects
         const MIN_FETCH_INTERVAL = 10000; // 10s minimum between fetches for same chat
-        
+
         const isStandalone = window.self === window.top;
-        
+
         async function init() {
             if (isStandalone) {
                 showTestMode();
                 return;
             }
-            
+
             // Quick health check to see if backend is online
             try {
-                const healthCheck = await fetch(API_BASE + '/api/health', { 
+                const healthCheck = await fetch(API_BASE + '/api/health', {
                     method: 'GET',
                     signal: AbortSignal.timeout(3000)  // 3 second timeout
                 }).catch(() => null);
-                
+
                 if (!healthCheck || !healthCheck.ok) {
                     showOffline();
                     return;
@@ -467,14 +505,14 @@
                 showOffline();
                 return;
             }
-            
+
             // Initialize WebSocket connection
             initWebSocket();
-            
+
             try {
                 widget = await LiveChat.createDetailsWidget();
                 widget.on('customer_profile', handleProfileChange);
-                
+
                 const profile = widget.getCustomerProfile();
                 if (profile && profile.chat) {
                     handleProfileChange(profile);
@@ -486,7 +524,7 @@
                 showError('Widget must run inside LiveChat');
             }
         }
-        
+
         function initWebSocket() {
             // Connect to WebSocket server for real-time updates
             try {
@@ -497,16 +535,16 @@
                     reconnectionDelay: 1000,
                     timeout: 10000,
                 });
-                
+
                 socket.on('connect', () => {
                     console.log('[WebSocket] Connected:', socket.id);
                     socketConnected = true;
-                    
+
                     // If we already have a chat, join the room
                     if (currentChatId) {
                         socket.emit('join_chat', { chat_id: currentChatId });
                     }
-                    
+
                     // Clear fallback polling if it was running
                     if (pollInterval) {
                         clearInterval(pollInterval);
@@ -514,40 +552,40 @@
                         console.log('[WebSocket] Cleared fallback polling');
                     }
                 });
-                
+
                 socket.on('disconnect', (reason) => {
                     console.log('[WebSocket] Disconnected:', reason);
                     socketConnected = false;
-                    
+
                     // Start fallback polling when WebSocket disconnects
                     if (!pollInterval && currentChatId) {
                         console.log('[WebSocket] Starting fallback polling (60s)');
                         pollInterval = setInterval(checkForNewMessages, FALLBACK_POLL_INTERVAL);
                     }
                 });
-                
+
                 socket.on('connect_error', (error) => {
                     console.error('[WebSocket] Connection error:', error.message);
                     socketConnected = false;
                 });
-                
+
                 socket.on('joined', (data) => {
                     console.log('[WebSocket] Joined chat room:', data.chat_id);
                 });
-                
+
                 // Handle real-time copilot updates from webhook
                 socket.on('copilot_update', (data) => {
                     console.log('[WebSocket] Received copilot_update:', data.chat_id);
-                    
+
                     // Only process if it's for the current chat
                     if (data.chat_id !== currentChatId) {
                         console.log('[WebSocket] Ignoring update for different chat');
                         return;
                     }
-                    
+
                     // Process the copilot result
                     const copilotResult = data.copilot || {};
-                    
+
                     const result = {
                         suggestions: {
                             primary_response: copilotResult.suggestions?.primary_response || '',
@@ -562,53 +600,53 @@
                         livechat_context: copilotResult.livechat_context || {},
                         suggestion_id: copilotResult.suggestion_id || null,
                     };
-                    
+
                     // Update message count if provided
                     if (data.message_count) {
                         lastMessageCount = data.message_count;
                     }
-                    
+
                     // Check if this is a new response
                     const newText = result.suggestions?.primary_response || '';
                     const oldText = lastResponse?.suggestions?.primary_response || '';
                     const isUpdate = lastResponse && newText !== oldText;
-                    
+
                     lastResponse = result;
                     currentSuggestionId = result.suggestion_id;
-                    
+
                     renderUI(result, isUpdate);
-                    
+
                     console.log('[WebSocket] UI updated with real-time suggestion');
                 });
-                
+
             } catch (error) {
                 console.error('[WebSocket] Init error:', error);
                 socketConnected = false;
             }
         }
-        
+
         async function handleProfileChange(profile) {
             // Stop existing polling
             if (pollInterval) {
                 clearInterval(pollInterval);
                 pollInterval = null;
             }
-            
+
             // Leave previous chat room if WebSocket connected
             if (socket && socketConnected && currentChatId) {
                 socket.emit('leave_chat', { chat_id: currentChatId });
             }
-            
+
             if (!profile || !profile.chat) {
                 showWaiting();
                 return;
             }
-            
+
             // Check if it's a new chat
             const newChatId = profile.chat.chat_id;
             const isNewChat = newChatId !== currentChatId;
             const now = Date.now();
-            
+
             if (isNewChat) {
                 // Reset state for new chat - CRITICAL: increment request ID to invalidate old requests
                 currentRequestId++;
@@ -620,20 +658,20 @@
                 lastResponse = null;
                 currentSuggestionId = null;
                 lastFetchTime = 0;  // Reset fetch throttle for new chat
-                
+
                 console.log('[Copilot] Switched to new chat:', newChatId, 'requestId:', currentRequestId);
                 showLoading();
-                
+
                 // Join the chat room for real-time updates
                 if (socket && socketConnected) {
                     socket.emit('join_chat', { chat_id: newChatId });
                     console.log('[Copilot] Joined WebSocket room for chat:', newChatId);
                 }
-                
+
                 // Fetch immediately for new chats
                 lastFetchTime = now;
                 await fetchChatAndAnalyze();
-                
+
                 // Only use polling as fallback if WebSocket is not connected
                 if (!socketConnected) {
                     console.log('[Copilot] WebSocket not connected, using fallback polling (60s)');
@@ -648,144 +686,144 @@
             }
             // With WebSocket connected, updates come via copilot_update events
         }
-        
+
         async function fetchChatAndAnalyze() {
             if (!currentChatId) return;
-            
+
             const chatIdAtStart = currentChatId;
             const requestIdAtStart = currentRequestId;
-            
+
             try {
                 // Fetch the full chat from our backend
                 const chatResponse = await fetch(API_BASE + '/api/livechat/chat/' + currentChatId);
-                
+
                 if (!chatResponse.ok) {
                     console.error('[Copilot] Failed to fetch chat');
                     return;
                 }
-                
+
                 const chatData = await chatResponse.json();
-                
+
                 // CRITICAL: Check if chat changed while we were fetching
                 if (chatIdAtStart !== currentChatId || requestIdAtStart !== currentRequestId) {
                     console.log('[Copilot] Chat changed during fetch, discarding');
                     return;
                 }
-                
+
                 currentChatData = chatData; // Store for AI context
-                
+
                 // Build transcript from messages
                 const thread = chatData.thread || chatData;
                 const events = thread.events || [];
                 const messages = events.filter(e => e.type === 'message');
-                
+
                 // Check if there are new messages
                 if (messages.length === lastMessageCount && lastResponse) {
                     // No new messages, don't refresh
                     return;
                 }
-                
+
                 lastMessageCount = messages.length;
-                
+
                 // Build transcript with timestamps
                 let transcript = '';
                 let lastCustomerMessage = '';
-                
+
                 messages.forEach(msg => {
-                    const isCustomer = msg.author_id?.startsWith('customer') || 
-                                       (msg.author_id && !msg.author_id.includes('@'));
+                    const isCustomer = msg.author_id?.startsWith('customer') ||
+                        (msg.author_id && !msg.author_id.includes('@'));
                     const author = isCustomer ? 'Customer' : 'Agent';
                     const text = msg.text || '';
                     transcript += author + ': ' + text + '\n';
-                    
+
                     if (isCustomer) {
                         lastCustomerMessage = text;
                     }
                 });
-                
+
                 currentTranscript = transcript;
-                
+
                 // Only get AI suggestions if there's a customer message
                 if (lastCustomerMessage) {
                     await getSuggestions(lastCustomerMessage);
                 }
-                
+
             } catch (error) {
                 console.error('[Copilot] Error fetching chat:', error);
             }
         }
-        
+
         async function checkForNewMessages() {
             if (!currentChatId || isRefreshing) return;
-            
+
             isRefreshing = true;
             const chatIdAtStart = currentChatId;
             const requestIdAtStart = currentRequestId;
-            
+
             try {
                 // Fetch chat to check message count
                 const chatResponse = await fetch(API_BASE + '/api/livechat/chat/' + currentChatId);
-                
+
                 if (!chatResponse.ok) {
                     isRefreshing = false;
                     return;
                 }
-                
+
                 const chatData = await chatResponse.json();
-                
+
                 // CRITICAL: Check if chat changed while we were polling
                 if (chatIdAtStart !== currentChatId || requestIdAtStart !== currentRequestId) {
                     console.log('[Copilot] Chat changed during poll, discarding');
                     return;
                 }
-                
+
                 currentChatData = chatData; // Always keep chat data fresh
-                
+
                 const thread = chatData.thread || chatData;
                 const events = thread.events || [];
                 const messages = events.filter(e => e.type === 'message');
-                
+
                 // Only re-analyze if message count changed
                 if (messages.length !== lastMessageCount) {
                     console.log('[Copilot] New message detected!', messages.length, 'vs', lastMessageCount);
                     lastMessageCount = messages.length;
-                    
+
                     // Rebuild transcript
                     let transcript = '';
                     let lastCustomerMessage = '';
-                    
+
                     messages.forEach(msg => {
-                        const isCustomer = msg.author_id?.startsWith('customer') || 
-                                           (msg.author_id && !msg.author_id.includes('@'));
+                        const isCustomer = msg.author_id?.startsWith('customer') ||
+                            (msg.author_id && !msg.author_id.includes('@'));
                         const author = isCustomer ? 'Customer' : 'Agent';
                         const text = msg.text || '';
                         transcript += author + ': ' + text + '\n';
-                        
+
                         if (isCustomer) {
                             lastCustomerMessage = text;
                         }
                     });
-                    
+
                     currentTranscript = transcript;
-                    
+
                     // Re-analyze with new data only if there's a customer message
                     if (lastCustomerMessage) {
                         await getSuggestions(lastCustomerMessage);
                     }
                 }
-                
+
             } catch (error) {
                 console.error('[Copilot] Poll error:', error);
             } finally {
                 isRefreshing = false;
             }
         }
-        
+
         async function getSuggestions(lastMessage) {
             // Capture current state at request time
             const requestId = currentRequestId;
             const chatIdAtRequest = currentChatId;
-            
+
             try {
                 // Build comprehensive request with full chat data
                 const requestBody = {
@@ -798,14 +836,14 @@
                     // CRITICAL: Include full chat data for context
                     chat_data: currentChatData
                 };
-                
+
                 console.log('[Copilot] Sending request with', {
                     chat_id: currentChatId,
                     transcript_length: currentTranscript.length,
                     messages: lastMessageCount,
                     has_chat_data: !!currentChatData
                 });
-                
+
                 // STAGE 1: Get quick customer context immediately (fast)
                 // IMPORTANT: Include chat_data so we can extract email from pre-chat form
                 const contextPromise = fetch(API_BASE + '/api/copilot/context', {
@@ -819,20 +857,20 @@
                         chat_data: currentChatData  // Needed to extract email from pre-chat form
                     })
                 });
-                
+
                 // STAGE 2: Get AI suggestions (slower)
                 const suggestionsPromise = fetch(API_BASE + '/api/copilot/process-message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody)
                 });
-                
+
                 // Show quick context as soon as it's ready
                 try {
                     const contextResponse = await contextPromise;
                     if (contextResponse.ok) {
                         const contextData = await contextResponse.json();
-                        
+
                         // Check for stale response
                         if (requestId === currentRequestId && chatIdAtRequest === currentChatId) {
                             // Normalize API response (supports both legacy and new shapes)
@@ -843,31 +881,28 @@
                 } catch (e) {
                     console.log('[Copilot] Context fetch failed, waiting for full response');
                 }
-                
+
                 // Now wait for full AI suggestions
                 const response = await suggestionsPromise;
-                
+
                 if (!response.ok) throw new Error('API error');
-                
+
                 const raw = await response.json();
-                
+
                 // Map API response into the widget's expected shape
                 const result = {
                     suggestions: {
-                        primary_response: raw.suggestions?.primary_response 
-                            || raw.suggestion?.suggestion 
+                        primary_response: raw.suggestions?.primary_response
+                            || raw.suggestion?.suggestion
                             || '',
-                        alternatives: raw.suggestions?.alternatives 
-                            || raw.suggestion?.alternatives 
+                        alternatives: raw.suggestions?.alternatives
+                            || raw.suggestion?.alternatives
                             || [],
-                        variations: raw.suggestions?.variations
-                            || raw.suggestion?.variations
-                            || [],
-                        detected_intent: raw.suggestions?.detected_intent 
-                            || raw.suggestion?.intent 
+                        detected_intent: raw.suggestions?.detected_intent
+                            || raw.suggestion?.intent
                             || null,
-                        recommended_actions: raw.suggestions?.recommended_actions 
-                            || raw.suggestion?.recommended_actions 
+                        recommended_actions: raw.suggestions?.recommended_actions
+                            || raw.suggestion?.recommended_actions
                             || [],
                         tool_calls: raw.suggestions?.tool_calls
                             || raw.suggestion?.tool_calls
@@ -903,28 +938,28 @@
                             || raw.suggestion?.company_analysis
                             || null,
                     },
-                    customer_context: raw.customer_context 
-                        || raw.context 
+                    customer_context: raw.customer_context
+                        || raw.context
                         || null,
                     livechat_context: raw.livechat_context || {},
                     suggestion_id: raw.suggestion_id || raw.suggestion?.suggestion_id || null,
                 };
-                
+
                 // CRITICAL: Discard stale responses from old chats
                 if (requestId !== currentRequestId || chatIdAtRequest !== currentChatId) {
-                    console.log('[Copilot] Discarding stale response for chat:', chatIdAtRequest, 
-                                '(current:', currentChatId, ')');
+                    console.log('[Copilot] Discarding stale response for chat:', chatIdAtRequest,
+                        '(current:', currentChatId, ')');
                     return;
                 }
-                
+
                 // Check if response actually changed
                 const newText = result.suggestions?.primary_response || '';
                 const oldText = lastResponse?.suggestions?.primary_response || '';
                 const isUpdate = lastResponse && newText !== oldText;
-                
+
                 lastResponse = result;
                 renderUI(result, isUpdate);
-                
+
             } catch (error) {
                 console.error('[Copilot] Error getting suggestions:', error);
                 if (!lastResponse) {
@@ -937,14 +972,14 @@
                 }
             }
         }
-        
+
         function renderPartialUI(contextData, lastMessage) {
             // Render quick context immediately with a "generating" placeholder for AI
             const ctx = contextData || {};
             const app = document.getElementById('app');
-            
+
             let html = '';
-            
+
             // Show "Generating..." for the response
             html += '<div class="response-hero">';
             html += '<div class="response-label">✨ GENERATING RESPONSE...</div>';
@@ -957,7 +992,7 @@
             html += '</div>';
             html += '<div style="padding: 12px 16px;"><div class="loading-spinner"></div></div>';
             html += '</div>';
-            
+
             // Show basic customer info immediately (no A4 lookup)
             if (ctx.client) {
                 html += '<div class="context-section open">';
@@ -989,93 +1024,41 @@
             html += '<div style="font-size: 12px; color: var(--text); margin-bottom: 6px; padding: 6px; background: var(--bg); border-radius: 4px;">• Customer journey URLs (current/referrer/viewed)</div>';
             html += '<div style="font-size: 12px; color: var(--text); margin-bottom: 6px; padding: 6px; background: var(--bg); border-radius: 4px;">• Terra product page scrape (if needed for specs/pricing)</div>';
             html += '</div></div>';
-            
+
             app.innerHTML = html;
         }
-        
+
         function renderUI(result, isUpdate) {
             const ctx = result.customer_context || {};
             const sug = result.suggestions || {};
             const lc = result.livechat_context || {};
             const app = document.getElementById('app');
-            
+
             let html = '';
-            
+
             // Minimal status bar
             html += '<div class="status-bar">';
             html += '<span><span class="status-dot live"></span>' + lastMessageCount + ' messages • v' + COPILOT_WIDGET_VERSION + '</span>';
             html += '<span>' + escapeHtml(currentProfile?.name || 'Visitor') + '</span>';
             html += '</div>';
-            
+
             // Response
             if (sug.primary_response) {
-                // Build variations list (Recommended + labeled variations)
-                const vars = [];
-                vars.push({ label: 'recommended', response: sug.primary_response });
-
-                if (Array.isArray(sug.variations) && sug.variations.length) {
-                    sug.variations.forEach(function(v) {
-                        if (!v) return;
-                        const label = (v.label || '').toString().trim();
-                        const resp = (v.response || '').toString().trim();
-                        if (!resp) return;
-                        vars.push({ label: label, response: resp });
-                    });
-                } else if (Array.isArray(sug.alternatives) && sug.alternatives.length) {
-                    sug.alternatives.forEach(function(alt, idx) {
-                        const resp = (alt || '').toString().trim();
-                        if (!resp) return;
-                        vars.push({ label: 'alt_' + (idx + 1), response: resp });
-                    });
-                }
-
-                currentVariations = vars;
-                currentVariationIndex = 0;
-
                 html += '<div class="response-hero' + (isUpdate ? ' updated' : '') + '">';
                 html += '<div class="response-label">✨ SUGGESTED RESPONSE</div>';
-
-                // Tabs
-                if (currentVariations.length > 1) {
-                    html += '<div class="var-tabs">';
-                    currentVariations.slice(0, 4).forEach(function(v, idx) {
-                        const rawLabel = (v.label || '').toString().trim().toLowerCase();
-                        let label = rawLabel;
-                        if (idx === 0) label = 'recommended';
-                        if (label === 'recommended') label = '★ Recommended';
-                        else if (label === 'concise') label = 'Concise';
-                        else if (label === 'detailed') label = 'Detailed';
-                        else if (label === 'friendly') label = 'Friendly';
-                        else label = 'Alternative';
-
-                        html += '<button class="var-tab' + (idx === 0 ? ' active' : '') + '" onclick="selectVariation(' + idx + ')">' + escapeHtml(label) + '</button>';
-                    });
-                    html += '</div>';
-                }
-
-                // Selected response text
-                const initialText = (currentVariations[0] && currentVariations[0].response) ? currentVariations[0].response : sug.primary_response;
-                html += '<div class="response-text" id="variation-text">' + escapeHtml(initialText) + '</div>';
-
-                // Actions
-                html += '<div class="var-actions">';
-                html += '<button class="use-btn" onclick="useSelectedResponse(this)">📋 USE THIS RESPONSE</button>';
-                html += '<button class="copy-btn" onclick="copySelectedResponse()">Copy</button>';
+                html += '<div class="response-text">' + escapeHtml(sug.primary_response) + '</div>';
+                html += '<div class="response-actions">';
+                html += '<button class="use-btn" onclick="useResponse(this, \'' + escapeJs(sug.primary_response) + '\')">';
+                html += '📋 USE THIS RESPONSE</button>';
+                html += '<button class="regen-btn" onclick="regenerateResponse()" title="Get a fresh AI response">';
+                html += '🔄 Regenerate</button>';
                 html += '</div>';
-                
-                // Feedback buttons
-                html += '<div class="feedback-buttons">';
-                html += '<button class="feedback-btn thumbs-up" onclick="sendFeedback(\'thumbs_up\')" title="This was helpful">👍</button>';
-                html += '<button class="feedback-btn thumbs-down" onclick="sendFeedback(\'thumbs_down\')" title="Not helpful">👎</button>';
-                html += '<button class="feedback-btn edited" onclick="sendFeedback(\'edited\')" title="I used this but edited it">✏️</button>';
                 html += '</div>';
-                
-                html += '</div>';
-                
+
                 // Store suggestion_id for feedback
                 currentSuggestionId = result.suggestion_id || null;
             }
-            
+
             // Action recommendation
             if (sug.recommended_actions && sug.recommended_actions.length > 0) {
                 const action = sug.recommended_actions[0];
@@ -1086,12 +1069,15 @@
                     html += '</div>';
                 }
             }
-            
+
+            // Alternatives removed - only show recommended response
+
             // COPILOT TRACE / WHAT WAS CHECKED
             const checks = sug.checks || {};
             const vec = checks.vector_search || {};
             const urls = checks.customer_urls || [];
             const prefetch = checks.prefetch_product_page || {};
+            const similar = sug.similar_examples || [];
             const facts = sug.facts_used || [];
 
             html += '<div class="context-section open">';
@@ -1121,7 +1107,7 @@
             html += '<div class="context-row"><span class="label">Customer URLs</span><span class="value">' + (urls.length ? (urls.length + ' captured') : 'None captured') + '</span></div>';
             if (urls.length) {
                 html += '<div style="font-size: 11px; color: var(--text-dim); margin-top: 6px; padding: 6px; background: var(--bg); border-radius: 6px;">';
-                urls.slice(0, 3).forEach(function(u) {
+                urls.slice(0, 3).forEach(function (u) {
                     const short = (u || '').replace(/^https?:\/\//, '').split('?')[0];
                     html += '• ' + escapeHtml(short.slice(0, 70)) + '<br>';
                 });
@@ -1149,13 +1135,39 @@
             if (facts && facts.length) {
                 html += '<div style="margin-top:10px;">';
                 html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">Facts used</div>';
-                facts.slice(0, 6).forEach(function(f) {
+                facts.slice(0, 6).forEach(function (f) {
                     html += '<div style="font-size: 12px; color: var(--text); margin-bottom: 6px; padding: 6px; background: var(--bg); border-radius: 4px;">• ' + escapeHtml(f) + '</div>';
                 });
                 html += '</div>';
             }
 
             html += '</div></div>';
+
+            // Similar examples (glimpse)
+            if (similar && similar.length) {
+                html += '<div class="context-section">';
+                html += '<div class="context-header" onclick="toggleSection(this.parentElement)">';
+                html += '<div class="context-title">📚 Similar Examples (' + similar.length + ')</div>';
+                html += '<span class="context-arrow">▶</span>';
+                html += '</div>';
+                html += '<div class="context-body" style="display: none;">';
+                similar.slice(0, 2).forEach(function (ex) {
+                    const simPct = (typeof ex.similarity === "number") ? Math.round(ex.similarity * 100) : 0;
+                    html += '<div style="padding:8px;background:var(--bg);border-radius:8px;margin-bottom:8px;border-left:3px solid var(--info);">';
+                    html += '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;">';
+                    html += '<span style="font-weight:700;color:var(--text);">' + simPct + '% match</span>';
+                    if (ex.search_method) html += '<span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;">' + escapeHtml(ex.search_method) + '</span>';
+                    html += '</div>';
+                    if (ex.customer_preview) {
+                        html += '<div style="font-size:11px;color:var(--text-dim);margin-top:6px;">Customer: ' + escapeHtml(ex.customer_preview) + '</div>';
+                    }
+                    if (ex.agent_preview) {
+                        html += '<div style="font-size:11px;color:var(--text-dim);margin-top:6px;">Agent: ' + escapeHtml(ex.agent_preview) + '</div>';
+                    }
+                    html += '</div>';
+                });
+                html += '</div></div>';
+            }
 
             // Tool Calls - show what the AI looked up dynamically
             if (sug.tool_calls && sug.tool_calls.length > 0) {
@@ -1165,7 +1177,7 @@
                 html += '<span class="context-arrow">▶</span>';
                 html += '</div>';
                 html += '<div class="context-body" style="display: none;">';
-                sug.tool_calls.forEach(function(tc) {
+                sug.tool_calls.forEach(function (tc) {
                     var isDeduped = !!tc.deduped;
                     var hasError = tc.result && tc.result.error;
                     var status = isDeduped ? '↺' : (hasError ? '✗' : '✓');
@@ -1174,7 +1186,7 @@
                     html += '<span style="color: ' + statusColor + ';">' + status + '</span> ';
                     html += '<strong>' + escapeHtml(tc.tool) + '</strong>';
                     if (tc.args) {
-                        var argStr = Object.entries(tc.args).map(function(e) { return e[0] + '=' + e[1]; }).join(', ');
+                        var argStr = Object.entries(tc.args).map(function (e) { return e[0] + '=' + e[1]; }).join(', ');
                         html += ' <span style="opacity: 0.7;">(' + escapeHtml(argStr) + ')</span>';
                     }
                     if (tc.result && tc.result.error) {
@@ -1193,7 +1205,7 @@
                 html += '<span class="context-arrow">▼</span>';
                 html += '</div>';
                 html += '<div class="context-body">';
-                sug.agent_product_links.slice(0, 5).forEach(function(p) {
+                sug.agent_product_links.slice(0, 5).forEach(function (p) {
                     var url = p.product_url || '';
                     var pn = p.part_number || '';
                     var name = p.product_name || '';
@@ -1210,7 +1222,7 @@
                 });
                 html += '</div></div>';
             }
-            
+
             // Agent Notes - actionable insights
             if (sug.context_notes && sug.context_notes.length > 0) {
                 html += '<div class="context-section open">';
@@ -1219,67 +1231,66 @@
                 html += '<span class="context-arrow">▼</span>';
                 html += '</div>';
                 html += '<div class="context-body">';
-                sug.context_notes.forEach(function(note) {
+                sug.context_notes.forEach(function (note) {
                     html += '<div style="font-size: 12px; color: var(--text); margin-bottom: 6px; padding: 6px; background: var(--bg); border-radius: 4px;">• ' + escapeHtml(note) + '</div>';
                 });
                 html += '</div></div>';
             }
-            
+
             if (!sug.primary_response) {
                 html = '<div class="state-container">';
                 html += '<div class="state-icon">💬</div>';
                 html += '<div class="state-text">Waiting for customer message...</div>';
                 html += '</div>';
             }
-            
+
             app.innerHTML = html;
         }
-        
+
         function toggleSection(el) {
             el.classList.toggle('open');
         }
 
-        function selectVariation(idx) {
-            try { idx = parseInt(idx, 10); } catch (e) { idx = 0; }
-            if (!Array.isArray(currentVariations) || currentVariations.length === 0) return;
-            if (idx < 0 || idx >= currentVariations.length) idx = 0;
-            currentVariationIndex = idx;
+        async function regenerateResponse() {
+            // Clear cached response to force fresh generation
+            lastResponse = null;
+            currentRequestId++;  // Invalidate any in-flight requests
 
-            const el = document.getElementById('variation-text');
-            if (el) {
-                const text = (currentVariations[idx] && currentVariations[idx].response) ? currentVariations[idx].response : '';
-                el.textContent = text;
+            // Show loading state
+            const app = document.getElementById('app');
+            app.innerHTML = '<div class="state-container"><div class="spinner"></div><div class="state-text">Generating new response...</div></div>';
+
+            // Build transcript and get last customer message
+            if (currentChatData) {
+                const thread = currentChatData.thread || currentChatData;
+                const events = thread.events || [];
+                const messages = events.filter(e => e.type === 'message');
+
+                let lastCustomerMessage = '';
+                messages.forEach(msg => {
+                    const isCustomer = msg.author_id?.startsWith('customer') ||
+                        (msg.author_id && !msg.author_id.includes('@'));
+                    if (isCustomer && msg.text) {
+                        lastCustomerMessage = msg.text;
+                    }
+                });
+
+                if (lastCustomerMessage) {
+                    await getSuggestions(lastCustomerMessage);
+                    showToast('New response generated!');
+                    return;
+                }
             }
 
-            const tabs = document.querySelectorAll('.var-tab');
-            tabs.forEach(function(t, i) {
-                if (i === idx) t.classList.add('active');
-                else t.classList.remove('active');
-            });
+            showToast('No message to regenerate from');
         }
 
-        async function useSelectedResponse(btn) {
-            if (!Array.isArray(currentVariations) || currentVariations.length === 0) return;
-            const v = currentVariations[currentVariationIndex] || currentVariations[0];
-            const text = (v && v.response) ? v.response : '';
-            if (!text) return;
-            await useResponse(btn, text);
-        }
-
-        function copySelectedResponse() {
-            if (!Array.isArray(currentVariations) || currentVariations.length === 0) return;
-            const v = currentVariations[currentVariationIndex] || currentVariations[0];
-            const text = (v && v.response) ? v.response : '';
-            if (!text) return;
-            copyToClipboard(text);
-        }
-        
         async function useResponse(btn, text) {
             // Log as "used" feedback
             if (currentSuggestionId) {
                 await sendFeedback('used', false);  // false = don't show toast
             }
-            
+
             if (widget) {
                 try {
                     await widget.putMessage(text);
@@ -1287,7 +1298,7 @@
                     if (btn) {
                         btn.classList.add('copied');
                         btn.textContent = '✓ ADDED';
-                        setTimeout(function() {
+                        setTimeout(function () {
                             btn.classList.remove('copied');
                             btn.innerHTML = '📋 USE THIS RESPONSE';
                         }, 2000);
@@ -1299,13 +1310,13 @@
                 copyToClipboard(text);
             }
         }
-        
+
         async function sendFeedback(feedbackType, showToastMsg = true) {
             if (!currentSuggestionId) {
                 console.warn('[Copilot] No suggestion_id available for feedback');
                 return;
             }
-            
+
             try {
                 const response = await fetch(API_BASE + '/api/feedback/explicit', {
                     method: 'POST',
@@ -1315,17 +1326,17 @@
                         feedback_type: feedbackType
                     })
                 });
-                
+
                 if (response.ok) {
                     // Visual feedback
                     const buttons = document.querySelectorAll('.feedback-btn');
                     buttons.forEach(btn => btn.classList.remove('active'));
-                    
+
                     const activeBtn = document.querySelector(`.feedback-btn.${feedbackType === 'thumbs_up' ? 'thumbs-up' : feedbackType === 'thumbs_down' ? 'thumbs-down' : 'edited'}`);
                     if (activeBtn) {
                         activeBtn.classList.add('active');
                     }
-                    
+
                     if (showToastMsg) {
                         const messages = {
                             'thumbs_up': 'Thanks for the feedback! 👍',
@@ -1344,13 +1355,13 @@
                 console.error('[Copilot] Error sending feedback:', error);
             }
         }
-        
+
         function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(function() {
+            navigator.clipboard.writeText(text).then(function () {
                 showToast('Copied to clipboard!');
             });
         }
-        
+
         function formatAction(tool) {
             const actions = {
                 'lookup_quote': 'Look up quote',
@@ -1363,28 +1374,28 @@
             };
             return actions[tool] || tool;
         }
-        
+
         function showToast(msg) {
             const toast = document.getElementById('toast');
             toast.textContent = msg;
             toast.classList.add('show');
-            setTimeout(function() { toast.classList.remove('show'); }, 2500);
+            setTimeout(function () { toast.classList.remove('show'); }, 2500);
         }
-        
+
         function showLoading() {
-            document.getElementById('app').innerHTML = 
+            document.getElementById('app').innerHTML =
                 '<div class="state-container"><div class="spinner"></div><div class="state-text">Analyzing chat...</div></div>';
         }
-        
+
         function showWaiting() {
-            document.getElementById('app').innerHTML = 
+            document.getElementById('app').innerHTML =
                 '<div class="state-container"><div class="state-icon">💬</div><div class="state-text">Select a chat to get started</div></div>';
         }
-        
+
         function showError(msg) {
             document.getElementById('app').innerHTML = '<div class="error-box">' + escapeHtml(msg) + '</div>';
         }
-        
+
         function showOffline() {
             document.getElementById('app').innerHTML = `
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 24px; text-align: center;">
@@ -1401,7 +1412,7 @@
                 </div>
             `;
         }
-        
+
         // ============ TEST MODE ============
         function showTestMode() {
             const app = document.getElementById('app');
@@ -1423,23 +1434,23 @@
                 '</div>' +
                 '<div id="test-results"></div>';
         }
-        
+
         async function runTest() {
             const email = document.getElementById('test-email').value;
             const name = document.getElementById('test-name').value || 'Test Customer';
             const message = document.getElementById('test-message').value;
-            
+
             if (!message.trim()) {
                 showToast('Enter a message first');
                 return;
             }
-            
+
             currentProfile = { email: email, name: name };
             currentTranscript = 'Customer: ' + message;
-            
-            document.getElementById('test-results').innerHTML = 
+
+            document.getElementById('test-results').innerHTML =
                 '<div class="state-container"><div class="spinner"></div><div class="state-text">Analyzing...</div></div>';
-            
+
             try {
                 const response = await fetch(API_BASE + '/api/copilot/process-message', {
                     method: 'POST',
@@ -1453,15 +1464,15 @@
                         customer_name: name
                     })
                 });
-                
+
                 if (!response.ok) throw new Error('API error: ' + response.status);
-                
+
                 const result = await response.json();
                 const ctx = result.customer_context || {};
                 const sug = result.suggestions || {};
-                
+
                 let html = '';
-                
+
                 if (sug.primary_response) {
                     html += '<div class="response-hero">';
                     html += '<div class="response-label">✨ SUGGESTED RESPONSE</div>';
@@ -1469,16 +1480,16 @@
                     html += '<button class="use-btn" onclick="copyToClipboard(\'' + escapeJs(sug.primary_response) + '\')">';
                     html += '📋 COPY RESPONSE</button>';
                     html += '</div>';
-                    
+
                     if (sug.alternatives && sug.alternatives.length > 0) {
                         html += '<div class="alternatives">';
                         html += '<div class="alt-label">Alternatives:</div>';
-                        sug.alternatives.slice(0, 2).forEach(function(alt) {
+                        sug.alternatives.slice(0, 2).forEach(function (alt) {
                             html += '<div class="alt-item" onclick="copyToClipboard(\'' + escapeJs(alt) + '\')">' + escapeHtml(alt) + '</div>';
                         });
                         html += '</div>';
                     }
-                    
+
                     html += '<div style="padding: 12px 16px; font-size: 12px; color: var(--text-dim);">';
                     const checks = sug.checks || {};
                     const vec = checks.vector_search || {};
@@ -1488,28 +1499,29 @@
                 } else {
                     html = '<div class="error-box">No suggestion generated.</div>';
                 }
-                
+
                 document.getElementById('test-results').innerHTML = html;
-                
+
             } catch (error) {
-                document.getElementById('test-results').innerHTML = 
+                document.getElementById('test-results').innerHTML =
                     '<div class="error-box">Error: ' + escapeHtml(error.message) + '</div>';
             }
         }
-        
+
         function escapeHtml(text) {
             if (!text) return '';
             var div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
         }
-        
+
         function escapeJs(text) {
             if (!text) return '';
             return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n').replace(/\r/g, '');
         }
-        
+
         document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
+
 </html>
