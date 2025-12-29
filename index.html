@@ -18,12 +18,12 @@
             --bg: #0f0f14;
             --card: #1a1a24;
             --border: #2a2a3a;
-            --text: #e8e8ed;
-            --text-dim: #7a7a8f;
-            --accent: #5eb8a0;
-            --accent-hover: #6ecfb5;
-            --warning: #d4915a;
-            --info: #6a9fd4;
+            --text: #f0f0f5;
+            --text-dim: #8888a0;
+            --accent: #00d4aa;
+            --accent-hover: #00f0c0;
+            --warning: #ffa726;
+            --info: #42a5f5;
         }
 
         body {
@@ -115,14 +115,14 @@
         }
 
         .use-btn {
-            flex: 1;
-            padding: 8px 14px;
+            width: 100%;
+            padding: 14px 20px;
             background: var(--accent);
             color: #000;
             border: none;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.15s;
         }
@@ -140,25 +140,23 @@
         .response-actions {
             display: flex;
             gap: 8px;
-            padding: 8px 16px;
+            padding: 12px 16px;
         }
 
         .regen-btn {
-            padding: 8px 12px;
+            padding: 10px 16px;
             background: transparent;
-            color: var(--text-dim);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 500;
+            color: var(--accent);
+            border: 1px solid var(--accent);
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
             cursor: pointer;
             transition: all 0.15s;
         }
 
         .regen-btn:hover {
-            background: var(--card);
-            border-color: var(--accent);
-            color: var(--text);
+            background: rgba(59, 225, 183, 0.1);
         }
 
         .feedback-btn.thumbs-up.active {
@@ -1241,8 +1239,18 @@
 
             if (!sug.primary_response) {
                 html = '<div class="state-container">';
-                html += '<div class="state-icon">💬</div>';
-                html += '<div class="state-text">Waiting for customer message...</div>';
+                if (sug.error) {
+                    // Show the actual error from the API
+                    html += '<div class="state-icon">⚠️</div>';
+                    html += '<div class="state-text" style="color: var(--warning);">Generation error: ' + escapeHtml(sug.error) + '</div>';
+                } else if (sug.context_notes && sug.context_notes.length > 0) {
+                    // Show context notes (e.g., for acknowledgment messages)
+                    html += '<div class="state-icon">💬</div>';
+                    html += '<div class="state-text">' + escapeHtml(sug.context_notes[0]) + '</div>';
+                } else {
+                    html += '<div class="state-icon">💬</div>';
+                    html += '<div class="state-text">Waiting for customer message...</div>';
+                }
                 html += '</div>';
             }
 
